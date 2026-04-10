@@ -1,0 +1,120 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-system"
+version = "0.1.0"
+description = "基于 LangChain 的 AI 情感分析智能体系统"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "AI Agent Team", email = "example@example.com"}
+]
+keywords = ["ai", "langchain", "emotion", "agent", "fastapi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+# 核心依赖
+dependencies = [
+    # LangChain 生态
+    "langchain==1.2.14",
+    "langchain-core==1.2.25",
+    "langchain-community==0.4.1",
+    "langchain-openai==1.1.12",
+    "langchain-chroma==1.1.0",
+    
+    # Web 框架
+    "fastapi==0.109.0",
+    "uvicorn==0.27.0",
+    "websockets==12.0",
+    
+    # 配置管理
+    "python-dotenv==1.0.1",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.13.1",
+    
+    # TTS
+    "edge-tts==6.1.0",
+    
+    # 日志
+    "loguru==0.7.3",
+    "python-json-logger==2.0.7",
+    
+    # 观测与监控
+    "langfuse==2.30.0",
+    "opentelemetry-api==1.22.0",
+    "opentelemetry-sdk==1.22.0",
+    
+    # RAG 评估
+    "ragas==0.1.0",
+    "datasets==2.16.0",
+]
+
+# 可选依赖组
+[project.optional-dependencies]
+dev = [
+    # 测试
+    "pytest==7.4.4",
+    "pytest-cov==4.1.0",
+    "pytest-asyncio==0.23.3",
+    
+    # 代码质量
+    "black==23.12.0",
+    "isort==5.13.2",
+    "flake8==7.0.0",
+    "mypy==1.8.0",
+]
+
+test = [
+    "pytest==7.4.4",
+    "pytest-cov==4.1.0",
+    "pytest-asyncio==0.23.3",
+]
+
+lint = [
+    "black==23.12.0",
+    "isort==5.13.2",
+    "flake8==7.0.0",
+    "mypy==1.8.0",
+]
+
+# 入口点配置
+[project.scripts]
+ai-agent-emotion = "src.api.main:main"
+
+# 工具配置
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+
+[tool.black]
+line-length = 88
+target-version = ['py310', 'py311']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+

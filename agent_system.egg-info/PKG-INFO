@@ -1,0 +1,51 @@
+Metadata-Version: 2.4
+Name: agent-system
+Version: 0.1.0
+Summary: 基于 LangChain 的 AI 情感分析智能体系统
+Author-email: AI Agent Team <example@example.com>
+License: MIT
+Keywords: ai,langchain,emotion,agent,fastapi
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: <3.12,>=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: langchain==1.2.14
+Requires-Dist: langchain-core==1.2.25
+Requires-Dist: langchain-community==0.4.1
+Requires-Dist: langchain-openai==1.1.12
+Requires-Dist: langchain-chroma==1.1.0
+Requires-Dist: fastapi==0.109.0
+Requires-Dist: uvicorn==0.27.0
+Requires-Dist: websockets==12.0
+Requires-Dist: python-dotenv==1.0.1
+Requires-Dist: pydantic==2.10.4
+Requires-Dist: pydantic-settings==2.13.1
+Requires-Dist: edge-tts==6.1.0
+Requires-Dist: loguru==0.7.3
+Requires-Dist: python-json-logger==2.0.7
+Requires-Dist: langfuse==2.30.0
+Requires-Dist: opentelemetry-api==1.22.0
+Requires-Dist: opentelemetry-sdk==1.22.0
+Requires-Dist: ragas==0.1.0
+Requires-Dist: datasets==2.16.0
+Provides-Extra: dev
+Requires-Dist: pytest==7.4.4; extra == "dev"
+Requires-Dist: pytest-cov==4.1.0; extra == "dev"
+Requires-Dist: pytest-asyncio==0.23.3; extra == "dev"
+Requires-Dist: black==23.12.0; extra == "dev"
+Requires-Dist: isort==5.13.2; extra == "dev"
+Requires-Dist: flake8==7.0.0; extra == "dev"
+Requires-Dist: mypy==1.8.0; extra == "dev"
+Provides-Extra: test
+Requires-Dist: pytest==7.4.4; extra == "test"
+Requires-Dist: pytest-cov==4.1.0; extra == "test"
+Requires-Dist: pytest-asyncio==0.23.3; extra == "test"
+Provides-Extra: lint
+Requires-Dist: black==23.12.0; extra == "lint"
+Requires-Dist: isort==5.13.2; extra == "lint"
+Requires-Dist: flake8==7.0.0; extra == "lint"
+Requires-Dist: mypy==1.8.0; extra == "lint"

@@ -1,0 +1,34 @@
+# 1. Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 2. 虚拟环境（核心！必忽略）
+venv/
+venv102/
+env/
+ENV/
+.env
+.venv
+
+# 3. 你的日志文件（核心！）
+logs/
+*.log
+
+# 4. 编辑器/系统垃圾
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 5. Uvicorn/FastAPI 缓存
+.uvicorn/
+
+# 6. 大模型文件（AI项目必加！）
+*.bin
+*.pth
+*.model
+*.gguf
+*.safetensors
+models/
+model/

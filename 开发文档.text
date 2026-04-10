@@ -1,0 +1,95 @@
+项目开发执行清单（零开发经验适配）
+
+说明：本清单严格按照项目功能依赖顺序编排，全程遵循“创建文件/配置→绑定关系→执行验证”的核心动作主线，无需掌握任何开发原理及代码编写技能，严格对照清单逐项执行，即可完成项目全流程部署。清单明确包含所有Python相关执行步骤，确保各环节衔接顺畅、流程闭环。
+
+1. 创建项目主计划文件：在项目根目录下创建PROJECT_MASTER_PLAN.md文件，以表格形式清晰列明全部16项功能模块、当前执行状态（未开始/进行中/已验收）、负责人及关联依赖项，并预留签字验收栏位，用于项目进度管控及验收确认。
+
+2. 搭建标准目录结构：在项目根目录下创建config/、plugins/、pipeline/、topology/、registry/、gateway/、store/、monitor/、tests/、ops/、scripts/共11个标准文件夹，其中scripts/文件夹专门用于统一存储所有Python执行脚本，实现脚本集中管理。
+
+3. 构建配置管理基座：在config/目录下创建global_settings.yaml配置文件，准确配置环境标识、日志级别、端口号、超时阈值及默认语言开关等基础全局参数，为项目整体运行提供基础配置支撑。
+
+4. 创建基础Python入口脚本：在scripts/目录下创建main.py文件，作为项目核心入口脚本，主要用于加载全局配置、初始化各功能模块，无需编写复杂逻辑，仅完成基础引入及初始化声明即可。
+
+5. 定义插件注册表：在registry/目录下创建plugin_manifest.json文件，明确定义plugin_id、version、type、entry_file、depends_on、health_status、load_priority等核心字段，规范插件注册标准及信息录入要求。
+
+6. 创建插件加载Python脚本：在scripts/目录下创建plugin_loader.py文件，关联registry/目录下的plugin_manifest.json文件，实现插件的自动加载、版本校验及依赖关系检测，并绑定config/目录下的全局配置，确保插件正常加载运行。
+
+7. 配置异步执行通道：在config/目录下创建async_executor.yaml配置文件，明确配置任务队列名称、最大并发数、消息保留时长及死信队列路由地址等异步执行关键参数，保障异步任务有序执行。
+
+8. 创建异步执行Python脚本：在scripts/目录下创建async_runner.py文件，读取config/目录下的async_executor.yaml配置参数，初始化异步任务队列，实现异步任务的分发与执行，并关联main.py入口脚本，确保异步模块与项目主入口联动。
+
+9. 定义会话管理规范：在store/目录下创建session_schema.yaml文件，明确session_id、user_token、start_time、last_heartbeat、context_buffer、status等会话核心字段及格式规范，统一会话管理标准。
+
+10. 创建会话管理Python脚本：在scripts/目录下创建session_manager.py文件，读取store/目录下的session_schema.yaml配置规范，实现会话的创建、更新、归档及查询功能，并关联async_runner.py脚本，实现会话数据的异步处理。
+
+11. 接入WebSocket生命周期：在gateway/目录下创建ws_lifecycle.yaml配置文件，按固定顺序绑定on_connect、on_auth、on_message、on_heartbeat、on_disconnect、on_reconnect六个钩子入口，明确各钩子的执行逻辑及触发条件。
+
+12. 创建WebSocket服务Python脚本：在scripts/目录下创建ws_server.py文件，加载gateway/目录下的ws_lifecycle.yaml配置，实现WebSocket服务的启动、连接管理及各钩子函数的触发，并关联session_manager.py脚本，完成会话与WebSocket连接的绑定。
+
+13. 绑定网关与会话：修改gateway/目录下的ws_lifecycle.yaml配置文件，在on_connect节点配置“生成session_id→写入session_schema→返回握手成功”的完整逻辑，在on_heartbeat节点配置“更新last_heartbeat”逻辑，在on_disconnect节点配置“标记session为archived→触发数据落盘”逻辑；同步更新scripts/目录下的ws_server.py脚本，确保配置与脚本联动一致，保障网关与会话正常交互。
+
+14. 部署限流熔断控制：在config/目录下创建rate_circuit.yaml配置文件，按per_session（单会话）和per_global（全局）双维度，合理设置qps_threshold（每秒请求阈值）、burst_allow（突发请求允许量）、circuit_open_duration（熔断开启时长）、fallback_response_template（降级响应模板）等限流熔断参数，保障系统稳定运行。
+
+15. 创建限流熔断Python脚本：在scripts/目录下创建rate_limiter.py文件，读取config/目录下的rate_circuit.yaml配置参数，实现限流熔断核心逻辑，并关联ws_server.py及async_runner.py脚本，确保系统各节点均能触发限流熔断控制，避免系统过载。
+
+16. 绘制入口拓扑图：在topology/目录下创建orchestrator_dag.yaml配置文件，以节点列表形式明确定义项目执行顺序：entry_ws → input_parse → session_load → emotion_understand → decision_route → safety_check → output_format → persist_log → reply_ws，规范项目执行流程。
+
+17. 创建拓扑调度Python脚本：在scripts/目录下创建dag_scheduler.py文件，读取topology/目录下的orchestrator_dag.yaml配置，实现拓扑节点的顺序调度、条件分支判断及超时重试逻辑，并关联main.py入口脚本，确保拓扑调度与项目主流程同步。
+
+18. 配置节点依赖与条件分支：在topology/目录下的orchestrator_dag.yaml文件中，为每条节点连线标注condition（条件分支，如emotion_score>0.7走tool_call分支，否则走direct_reply分支），同时标注timeout_ms（超时时间）与retry_count（重试次数）；同步更新scripts/目录下的dag_scheduler.py脚本，确保条件分支逻辑落地执行。
+
+19. 装配异步执行标记：在topology/目录下的orchestrator_dag.yaml文件中，为每个节点字段追加async_mode: true、queue: async_executor、result_callback: next_node配置，关联async_runner.py脚本，实现各拓扑节点的异步执行。
+
+20. 开发输入理解节点配置：在plugins/目录下新建input_understanding文件夹，在该文件夹下创建config.yaml配置文件，明确定义输入文本清洗规则、意图分类字典、情感标签集、多语言映射表及输出标准化模板，规范输入理解模块功能。
+
+21. 创建输入理解Python脚本：在plugins/input_understanding/目录下创建main.py文件，读取该目录下的config.yaml配置参数，实现输入文本的清洗、意图识别及情感分析功能，并关联dag_scheduler.py脚本，确保输入理解模块与拓扑调度联动。
+
+22. 建立数据持久化通道：在store/目录下创建persistence_config.yaml配置文件，划分user_profiles（用户档案）、interaction_logs（交互日志）、session_history（会话历史）三张存储表，明确配置各表的数据写入时机、归档周期及索引字段，保障数据有效存储。
+
+23. 创建数据持久化Python脚本：在scripts/目录下创建data_persist.py文件，读取store/目录下的persistence_config.yaml配置，实现数据的写入、归档及查询功能，并关联session_manager.py及各业务节点脚本，确保各模块数据正常落盘存储。
+
+24. 配置决策生成节点：在plugins/目录下新建decision_engine文件夹，在该文件夹下创建config.yaml配置文件，设定策略权重表、上下文检索窗口大小、响应生成源优先级及兜底话术池，规范决策生成逻辑。
+
+25. 创建决策生成Python脚本：在plugins/decision_engine/目录下创建main.py文件，读取该目录下的config.yaml配置参数，实现决策路由核心逻辑，并关联dag_scheduler.py及input_understanding模块脚本，确保决策生成与输入理解、拓扑调度联动。
+
+26. 嵌入安全伦理审查节点：在plugins/目录下新建safety_ethics文件夹，在该文件夹下创建config.yaml配置文件，载入敏感词库、价值观对齐规则、拦截等级（warn/block/escalate）及审核上报端点，构建安全审查体系。
+
+27. 创建安全审查Python脚本：在plugins/safety_ethics/目录下创建main.py文件，读取该目录下的config.yaml配置参数，实现内容安全审核及拦截逻辑，并关联dag_scheduler.py脚本，确保安全审查嵌入项目执行全流程。
+
+28. 封装输出交互节点：在plugins/目录下新建output_interaction文件夹，在该文件夹下创建config.yaml配置文件，配置流式推送开关、文本排版模板、多格式包装器及WebSocket分包阈值，规范输出交互格式。
+
+29. 创建输出交互Python脚本：在plugins/output_interaction/目录下创建main.py文件，读取该目录下的config.yaml配置参数，实现输出内容的格式化及流式推送功能，并关联ws_server.py脚本，确保输出内容正常推送至前端。
+
+30. 预留多模态通道：在plugins/目录下新建multimodal_stub文件夹，在该文件夹下创建config.yaml配置文件，声明image（图片）、audio（音频）、video（视频）三种类型的占位路由，明确定义附件上传入口、解码超时及类型校验规则，当前暂指向空处理器，为后续多模态功能扩展预留接口。
+
+31. 创建多模态占位Python脚本：在plugins/multimodal_stub/目录下创建main.py文件，读取该目录下的config.yaml配置参数，实现多模态路由的占位及类型校验功能，并关联dag_scheduler.py脚本，确保预留通道与项目拓扑联动。
+
+32. 实现异常容错链路：在pipeline/目录下创建fault_recovery.yaml配置文件，为每个项目节点配置max_retries（最大重试次数）、fallback_node（降级节点）、error_log_format（错误日志格式）、dead_letter_forward（死信转发地址），设定全局熔断降级模板，提升系统容错能力。
+
+33. 创建异常处理Python脚本：在scripts/目录下创建fault_handler.py文件，读取pipeline/目录下的fault_recovery.yaml配置，实现异常捕获、重试及降级核心逻辑，并关联dag_scheduler.py及各业务节点脚本，确保异常能够及时处理，保障项目稳定运行。
+
+34. 集成工具调用适配器：在plugins/目录下新建tool_caller文件夹，在该文件夹下创建config.yaml配置文件，登记外部API清单、鉴权头映射、入参校验规则、出参提取路径及调用频率限制，规范外部工具调用流程。
+
+35. 创建工具调用Python脚本：在plugins/tool_caller/目录下创建main.py文件，读取该目录下的config.yaml配置参数，实现外部API的调用及结果处理功能，并关联dag_scheduler.py及rate_limiter.py脚本，确保工具调用符合限流要求且与拓扑调度联动。
+
+36. 挂载限流与熔断到拓扑：在topology/目录下的orchestrator_dag.yaml文件中，为每个节点出口追加throttle_rule: per_session（单会话限流规则）与circuit_breaker: node_specific（节点专属熔断规则）配置，绑定config/目录下rate_circuit.yaml中的阈值参数；同步更新dag_scheduler.py及rate_limiter.py脚本，确保限流熔断规则与拓扑节点深度绑定。
+
+37. 部署监控评估采集：在monitor/目录下创建metrics_dashboard.yaml配置文件，明确定义latency_ms（延迟时间）、success_rate（成功率）、block_rate（拦截率）、session_avg_duration（会话平均时长）、tool_call_cost（工具调用成本）、user_feedback_score（用户反馈评分）等核心监控采集项，实现项目运行状态全面监控。
+
+38. 创建监控采集Python脚本：在scripts/目录下创建metrics_collector.py文件，读取monitor/目录下的metrics_dashboard.yaml配置，实现监控指标的采集、统计及上报功能，并关联各业务节点及data_persist.py脚本，确保监控数据正常落盘及上报。
+
+39. 建立评估反馈闭环：在monitor/目录下创建eval_pipeline.yaml配置文件，配置日志抽取频率、自动评分规则、阈值告警通道（邮件/短信/控制台）及报表导出格式，构建项目评估反馈体系。
+
+40. 创建评估反馈Python脚本：在scripts/目录下创建eval_runner.py文件，读取monitor/目录下的eval_pipeline.yaml配置，实现日志抽取、自动评分及告警推送功能，并关联metrics_collector.py脚本，确保评估反馈闭环顺畅运行。
+
+41. 编写插件扩展加载器：在plugins/目录下新建loader文件夹，在该文件夹下创建config.yaml配置文件，设定热加载扫描路径、版本校验脚本、依赖冲突解决策略、权限白名单及插件启用/停用开关，规范插件扩展加载流程。
+
+42. 更新插件加载Python脚本：修改scripts/目录下的plugin_loader.py文件，读取plugins/loader/config.yaml配置参数，新增插件热加载及依赖冲突处理功能，并关联main.py入口脚本，确保插件扩展加载正常生效。
+
+43. 执行连通性验证：在tests/目录下创建smoke_test_flow.yaml配置文件，按顺序模拟完整业务流程：建立WS连接→发送情感文本→观察输入理解输出→检查安全拦截效果→记录决策路由路径→验证数据落盘存储→接收流式回复→触发限流规则→验证熔断降级功能→关闭WS连接→核对监控指标；同时在tests/目录下创建test_runner.py文件，读取smoke_test_flow.yaml配置，自动执行连通性测试，并输出详细测试报告。
+
+44. 运行全量配置检查：逐项比对PROJECT_MASTER_PLAN.md中的16项功能模块，确认每个模块均有对应的配置文件、拓扑连线、异常回退路径、监控埋点及关联Python脚本，确保无遗漏、无配置偏差。
+
+45. 创建配置检查Python脚本：在scripts/目录下创建config_checker.py文件，自动比对各模块配置文件与关联Python脚本的关联性，生成配置检查报告，辅助完成全量配置检查，提升检查效率。
+
+46. 输出交付验收包：在项目根目录生成DELIVERY_CHECKLIST.md文件，附加配置文件清单、拓扑执行日志、压测结果快照、插件加载报告、回滚预案索引，要求相关人员逐项打勾确认并签字验收；同时在scripts/目录下创建delivery_pack.py文件，自动收集各类报告及日志，生成标准化交付验收包，便于项目交付。
