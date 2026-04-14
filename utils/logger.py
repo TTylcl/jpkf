@@ -28,7 +28,7 @@ logger.add(
     
     level=settings.LOG_DEFAULT_LEVEL
 )
-def add_log( level: str, message: str, module: str = "systeam", **kwargs) -> None:
+def add_log( level: str, message: str, module: str = "system", **kwargs) -> None:
     """添加日志"""
 
     try:

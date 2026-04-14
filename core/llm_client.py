@@ -42,8 +42,8 @@ class LLMClient:
         rendered_prompt = EMOTIONAL_COMPANION_PROMPT_V1.format(user_input=user_input)
         # 2. 构造messages，把系统Prompt放在最前面，用户输入放后面
         messages = [
-            {"role": "system", "content": rendered_prompt},
-            {"role": "user", "content": user_input}
+            {"role": "system", "content": rendered_prompt}, #系统Prompt
+            {"role": "user", "content": user_input} #用户输入
         ]
      
         # 构造请求参数
