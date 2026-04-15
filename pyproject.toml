@@ -56,6 +56,8 @@ dependencies = [
     # RAG 评估
     "ragas==0.1.0",
     "datasets==2.16.0",
+    #熔断
+    "pybreaker"==1.4.1
 ]
 
 # 可选依赖组

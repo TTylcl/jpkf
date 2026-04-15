@@ -6,7 +6,7 @@ from core import settings
 from dotenv import load_dotenv
 from utils.logger import add_log
 from core.prompt_templates.base_templates2 import EMOTIONAL_COMPANION_PROMPT_V1
-
+from circuit.breaker import with_circuit_breaker,llm_breaker
 
 
 load_dotenv()
@@ -21,7 +21,7 @@ class LLMClient:
         #print(self.api_key)
         self.timeout = settings.PIPELINE_EXECUTE_TIMEOUT
         # 2. 初始化你刚写的日志工具，后面所有操作都打日志
-        add_log("info", "---- LLMClient 初始化 ---")
+        add_log("INFO", "---- LLMClient 初始化 ---")
         # 3. 初始化降级相关的参数：比如最大重试次数（3次）、熔断阈值（连续失败5次就直接降级）
         self.max_retry = settings.CIRCUIT_MAX_RETRY  # 最大重试次数
         self.circuit_breaker_threshold = settings.CIRCUIT_FAILURE_THRESHOLD # 熔断阈值
@@ -30,67 +30,44 @@ class LLMClient:
         #连续失败计数器
         #self.continuous_fail_count = settings.CONTINUOUS_FAIL_COUNT
         self.continuous_fail_count = 0
-    def call(self, user_input: str) -> str: #input
+
+    #降级逻辑
+    def _llm_fallback(self, messages: list,ctx=None,**kwargs) -> str:
+        add_log("INFO", "LLMClient 降级处理",module='llm_client',ctx=ctx)
+        return settings.CIRCUIT_DEGRADE_MESSAGE #默认的LLM的降级回复
+    @with_circuit_breaker(breaker=llm_breaker,fallback_func=_llm_fallback)
+    def call(self, messages: list[dict],temperature:float=0.1,max_tokens:int=500,ctx=None) -> str: #input
         # 1. 打info日志：记录「开始调用大模型，用户输入内容：xxx」
-        add_log("info", "开始调用大模型，用户输入内容：{}".format(user_input))
-        # 2. 先判断熔断状态：如果已经触发熔断（连续失败超过阈值），直接返回兜底回复，不用发请求（对应你学的降级知识点）
-        if self.circuit_breaker_threshold <= self.continuous_fail_count:
-            add_log("warning",  f"触发熔断，连续失败次数：{self.continuous_fail_count}")
-            return self.circuit_breaker_message
-        # 3. 构造请求参数：按照你用的大模型的API文档填，和你之前构造天气API请求参数的逻辑一样
-        # 1. 渲染Prompt模板，把占位符{user_input}替换成实际的用户输入
-        rendered_prompt = EMOTIONAL_COMPANION_PROMPT_V1.format(user_input=user_input)
-        # 2. 构造messages，把系统Prompt放在最前面，用户输入放后面
-        messages = [
-            {"role": "system", "content": rendered_prompt}, #系统Prompt
-            {"role": "user", "content": user_input} #用户输入
-        ]
-     
-        # 构造请求参数
-        params = {     
-            "messages":messages, 
-              
-            "model": self.api_model,               
-        }
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }   
-        # 4. 发请求：加超时控制，失败了就重试（最多重试3次，对应你学的重试知识点）
+        add_log("INFO", f"开始调用大模：消息长度{len(messages)}",module='llm_client',ctx=ctx)
+       
+        #2 大模型请求
         for i in range(self.max_retry):
             try:
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}", # API密钥
+                    "Content-Type": "application/json", # 指定请求头
+                    }
+                json_data = {
+                    "model": self.api_model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+                
+ 
                 # 发请求
-                response = requests.post(url=self.api_url,headers=headers,json=params, timeout=self.timeout)
+                response = requests.post(url=self.api_url,headers=headers,json=json_data, timeout=self.timeout)
+               
                 # 检查响应状态码
                 response.raise_for_status()  # 如果状态码不是200，抛出HTTPError
+                #print("--------------1-------------------")
                 # 获取响应结果
-                
-                result = response.json()
-                # 获取大模型回复
-                output = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-        
-                # 打info日志，记录「调用成功，耗时xxms，大模型回复：xxx」
-                self.continuous_fail_count = 0
-                # 6. 调用成功：连续失败计数器清0，打info日志记录「调用成功，耗时xxms，大模型回复：xxx」，把回复返回
-                add_log("info", "调用成功，大模型回复：{}".format(output))
-            
-                return output
-        # 5. 异常处理：不管是超时、限流、密钥错误、网络错误，都做三件事：
-            # a. 打error日志，记录具体错误原因
-            # b. 连续失败计数器+1，超过阈值就触发熔断
-            # c. 返回预设的兜底回复（比如「哎呀我现在有点卡，你等会再和我说哦😘」，和你之前天气API调不通返回「暂时查不到天气」的逻辑完全一样）
-            #except requests.exceptions.HTTPError as e:
-            # 404``````````````````````````````   
-             
+                result = response.json()["choices"][0]["message"]["content"]
+               
+                #print("---------------2------------------")
+                add_log("INFO", f"大模型返回：{result}",module='llm_client',ctx=ctx)
+                return result
             except Exception as e:
-                
-                self.continuous_fail_count += 1
-                if self.circuit_breaker_threshold <= self.continuous_fail_count:
-                    add_log("warning",  f"触发熔断，连续失败次数：{self.continuous_fail_count}")
-                    return self.circuit_breaker_message
-                else:
-                    add_log("error", "请求失败，错误信息：{}".format(str(e)))
-                    continue    
-                    
-       
+                add_log("ERROR", f"大模型第{i+1}次重试失败：{str(e)}", module="llm_client", ctx=ctx)
+                continue
+        raise RuntimeError(f"大模型调用重试{self.max_retry}次全部失败")
