@@ -20,7 +20,7 @@ WS_CONNECTION_TIMEOUT = 10
 #最大重试次数
 CIRCUIT_MAX_RETRY = 3
 # 熔断器失败阈值
-CIRCUIT_FAILURE_THRESHOLD = 2
+CIRCUIT_FAILURE_THRESHOLD = 3
 # 熔断器恢复时间
 CIRCUIT_RECOVERY_TIME = 5
 # 滑动窗口：只统计最近N次请求的失败率
@@ -45,6 +45,7 @@ LOG_RETENTION = "90 days"
 LOG_DEFAULT_LEVEL = "DEBUG" # 默认日志级别
 LOG_LEVEL = "INFO"
 API_LEVEL = "info"
+ALLOWED_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "UNKNOWN"}
 #5Pipeline 流水线默认配置
 # 默认流水线步骤（固定三步）
 DEFAULT_PIPELINE_STEPS = [
@@ -55,11 +56,6 @@ DEFAULT_PIPELINE_STEPS = [
 # 流水线执行超时（秒）
 PIPELINE_EXECUTE_TIMEOUT = 20
 
-
-# 【6】拓扑结构默认配置
-
-# 默认拓扑类型：linear(线性) / dag(有向无环图)
-DEFAULT_TOPOLOGY = "linear"
 
 # 【7】插件系统默认配置
 
