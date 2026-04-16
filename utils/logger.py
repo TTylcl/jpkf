@@ -61,6 +61,5 @@ def add_log( level: str, message: str, module: str = "system", ctx:Optional["Age
         if normalized_level == "ERROR":
             ctx.error_logs.append(log_record)
 
-    getattr(logger, normalized_level.lower())(f"[{module}] {message}", **log_record)
-    
+    getattr(logger.bind(module=module, **kwargs), normalized_level.lower())(message)
 

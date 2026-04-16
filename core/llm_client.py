@@ -36,7 +36,7 @@ class LLMClient:
         add_log("INFO", "LLMClient 降级处理",module='llm_client',ctx=ctx)
         return settings.CIRCUIT_DEGRADE_MESSAGE #默认的LLM的降级回复
     @with_circuit_breaker(breaker=llm_breaker,fallback_func=_llm_fallback)
-    def call(self, messages: list[dict],temperature:float=0.1,max_tokens:int=500,ctx=None) -> str: #input
+    async def call(self, messages: list[dict],temperature:float=0.1,max_tokens:int=500,ctx=None) -> str: #input
         # 1. 打info日志：记录「开始调用大模型，用户输入内容：xxx」
         add_log("INFO", f"开始调用大模：消息长度{len(messages)}",module='llm_client',ctx=ctx)
        

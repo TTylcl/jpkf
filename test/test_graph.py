@@ -23,12 +23,13 @@ async def test_chat():
     chat_graph =build_chat_graph()#
     # 3. 执行Graph
    
-    add_log(result["ctx"].logs)
+    
     print("\n开始执行Graph...")
     result = await chat_graph.ainvoke(
         initial_state,
         config={"recursion_limit": 10}
     )
+    add_log("info", "执行结果", "system", ctx, result=result)
     # ✅ 只打印核心字段，不要直接打印整个State
     print("\n✅ 执行完成！")
     print(f"结果：{result['generated_reply']}")

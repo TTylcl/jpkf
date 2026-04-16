@@ -22,8 +22,8 @@ class AgentContext(BaseModel):
     全局共享上下文
     作用：贯穿 Agent / 流水线 / 插件 / 熔断 / 异常 的所有数据载体
     """
-    agent_id: str #智能体ID
-    agent_name: str #
+    agent_id: str =None #智能体ID
+    agent_name: str =None #
 
     """
     输入数据
@@ -50,9 +50,9 @@ class AgentContext(BaseModel):
 
     #----日志---
     #日志记录
-    logs: List[Dict] = Field(default_factory=list)
+    logs: List[Dict] = Field(default_factory=list,exclude=True)
     ## 错误日志单独存一份，方便快速获取
-    error_logs: List[Dict[str, Any]] = Field(default_factory=list)
+    error_logs: List[Dict[str, Any]] = Field(default_factory=list,exclude=True)
 
     # 熔断状态
     # --------------------------
@@ -60,12 +60,12 @@ class AgentContext(BaseModel):
 
    
     # 插件状态 & 记忆 & 元数据
-    plugin_status: Dict[str, bool] = Field(default_factory=dict)
-    plugin_memory: Dict[str, Any]  = Field(default_factory=dict)
-    plugin_meta: Dict[str, Any]  = Field(default_factory=dict)
+    plugin_status: Dict[str, bool] = Field(default_factory=dict,exclude=True)
+    plugin_memory: Dict[str, Any]  = Field(default_factory=dict,exclude=True)
+    plugin_meta: Dict[str, Any]  = Field(default_factory=dict,exclude=True)
 
     #LLMclient
-    llm_client: Any 
+    llm_client: Optional[Any] = Field(default=None,exclude=True)
     """
     def add_simple_log(self, log_level: str, message: str, **kwargs)-> None:
      

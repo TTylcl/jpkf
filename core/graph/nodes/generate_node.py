@@ -1,9 +1,9 @@
-
+import asyncio
 from utils.logger import add_log
 from core.graph.state import ChatState # 导入ChatState类型
 
 # ❶ 入参类型从dict改成ChatState，IDE会自动补全所有字段
-def generate_reply_node(state: ChatState) -> dict:
+async def generate_reply_node(state: ChatState) -> dict:
     # ❷ 把state["ctx"]改成state.ctx，属性访问更安全，写错字段立刻报错
     ctx = state.ctx
     # ✅ 正确用法：只调 add_log，传 ctx 参数
@@ -11,7 +11,7 @@ def generate_reply_node(state: ChatState) -> dict:
     # 日志
     add_log("INFO", "进入回复生成节点", module="generate_reply_node", ctx=ctx)
     # 调用大模型
-    reply = ctx.llm_client.call(
+    reply = await ctx.llm_client.call(
         messages=state.messages, 
         temperature=0.05,
         ctx=ctx
