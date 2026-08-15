@@ -71,4 +71,24 @@ AGENT_DEFAULT_NAME = "找我来聊天吧"
 AGENT_TASK_INPUT_MAX_LENGTH = 1000  # 任务输入最大长度
 ACTIVE_PROMPT = 'v1'  # 激活提示
 
-#
+#数据库配置
+DB_URI = "postgresql://postgres:123456@localhost:5432/edu_agent"
+DB_CONFIG = {
+    "host": "localhost",
+    "port": 5432,
+    "database": "edu_agent",
+    "user": "postgres",
+    "password": "123456",
+    "cursor_factory": "RealDictCursor"
+}
+# 测试数据库配置 目前正在使用这个
+DB_URI_TEST = "postgresql+asyncpg://postgres:123456@localhost:5434/test_database"
+DB_CONFIG_TEST = {
+    "host": "localhost",
+    "port": 5434,
+    "database": "test_database",
+    "user": "postgres",
+    "password": "123456",
+    "cursor_factory": "RealDictCursor"
+}
+

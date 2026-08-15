@@ -1,87 +1,89 @@
-# \core\context.py
-#导入数据类模块
-from typing import List, Dict, Optional,Any
+"""
+CTX - 双智能体教务系统统一上下文
+【pydantic 版 + 微信适配】
 
-from pydantic import BaseModel,Field
-import sys
-from pathlib import Path
-from loguru import logger
-import time
-from core import settings
+【核心设计原则（8项，去掉3项过度设计）】
+1. ✅ 字段精简・幻觉免疫前置：只放必要字段
+2. ✅ 显式传递・全链路闭环：作为参数传，不用全局单例
+3. ✅ 异步友好・无阻塞适配：pydantic 异步友好
+4. ✅ 简单易用・边界内可控：结构清晰，职责单一
+5. ✅ 权限安全・原生前置拦截：agent_role + user_role 双层权限
+6. ✅ 业务绑定・权责边界固化：双智能体角色固定
+7. ✅ 不可篡改・幻觉免疫：frozen=True，AI 不能改
+8. ✅ 全链路可追溯：trace_id + request_id
+9. ✅ 生态兼容：pydantic 原生适配 FastAPI/微信生态
+10. ✅ 可扩展：预留 extra 字段
+"""
+#/core/context.py
+from __future__ import annotations
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any
 
 
-LOG_DIR = Path("logs")
-LOG_DIR.mkdir(exist_ok=True)
-
-#定义数据类
-
+#runtime 上下文
 class AgentContext(BaseModel):
+    """LangGraph Runtime Context Schema - 只映射config里的字段"""
+    user_id: str = ""          # 用户ID
+    agent_role: str = ""        # 智能体角色
+    user_role: str = ""       # 用户角色
+    trace_id: str = ""        # 全链路追踪ID
+    wx_openid: str = ""       # 微信 openid
+
+
+
+
+#service 上下文
+class CTX(BaseModel):
     """
-        定义一个数据类，用于存储插件上下文信息
-
-    全局共享上下文
-    作用：贯穿 Agent / 流水线 / 插件 / 熔断 / 异常 的所有数据载体
+    上下文对象
+    
+    【CRITICAL】frozen=True，创建后不可修改！
+    AI 绝对不能修改 CTX 里的任何字段，只能读
     """
-    agent_id: str =None #智能体ID
-    agent_name: str =None #
-
-    """
-    输入数据
-    用户的原始请求（如自然语言指令）
-    上下文参数
-    任务目标描述
-    前置步骤的输出结果
-    """
-    user_id:Optional[str] = None #用户ID
-    user_input: Optional[Any] =None  #用户原始请求
-    user_info: Optional[Dict] = None #用户信息
-    final_params: Optional[Dict] = None #上下文参数
-    """
-    输出数据
-    任务结果
-    任务结果描述
-    任务结果附件
-    """
-    task_result: Optional[Any] =None #存LLM回复
-
-
-
-
-
-    #----日志---
-    #日志记录
-    logs: List[Dict] = Field(default_factory=list,exclude=True)
-    ## 错误日志单独存一份，方便快速获取
-    error_logs: List[Dict[str, Any]] = Field(default_factory=list,exclude=True)
-
-    # 熔断状态
-    # --------------------------
-    circuit_status: str = "closed"  # closed / open / half_open
-
-   
-    # 插件状态 & 记忆 & 元数据
-    plugin_status: Dict[str, bool] = Field(default_factory=dict,exclude=True)
-    plugin_memory: Dict[str, Any]  = Field(default_factory=dict,exclude=True)
-    plugin_meta: Dict[str, Any]  = Field(default_factory=dict,exclude=True)
-
-    #LLMclient
-    llm_client: Optional[Any] = Field(default=None,exclude=True)
-    """
-    def add_simple_log(self, log_level: str, message: str, **kwargs)-> None:
-     
-        now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        log_entry = {
-            "time": now,
-            "level": log_level,
-            "message": message,
-            **kwargs
-        }
-        self.logs.append(log_entry)
-        if log_level == "ERROR":
-            self.error_logs.append(log_entry)
-    # 允许LLMClient这类非Pydantic类型的字段
-    """
-    class Config:
-        arbitrary_types_allowed = True
-
-
+    
+    model_config = {
+        "frozen": True,  # ✅ 不可篡改，幻觉免疫核心机制
+        "arbitrary_types_allowed": True  # 允许 session 这种非 pydantic 类型
+    }
+    
+    # ==========================================
+    # 🔐 权限核心字段（不可篡改）
+    # ==========================================
+    
+    agent_role: str = Field(..., description="智能体角色：customer_service_agent / edu_admin_agent")
+    user_id: int = Field(..., gt=0, description="系统内部用户ID，必须>0，拦截幻觉")
+    user_role: str = Field(..., description="用户角色：student / teacher / admin")
+    
+    # ==========================================
+    # ✨ 微信用户信息
+    # ==========================================
+    
+    wx_openid: str = Field("", description="微信 openid，空字符串表示非微信用户")
+    wx_unionid: Optional[str] = Field(None, description="微信 unionid，可选")
+    wx_session_key: Optional[str] = Field(None, description="微信会话密钥，可选，保密字段")
+    
+    # ==========================================
+    # 🔍 追踪审计字段
+    # ==========================================
+    
+    trace_id: str = Field(..., description="全链路追踪ID")
+    request_id: str = Field(None, description="单次请求ID")
+    
+    # ==========================================
+    # 🗄️ 数据库连接
+    # ==========================================
+    
+    session: Any = Field(..., description="数据库 session")
+    
+    # ==========================================
+    # 🌐 辅助字段
+    # ==========================================
+    
+    client_ip: str = Field("127.0.0.1", description="客户端IP")
+    user_agent: Optional[str] = Field(None, description="用户代理")
+    
+    # ==========================================
+    # 🚀 预留扩展字段（"领域化可扩展"简化版）
+    # ==========================================
+    
+    extra: Dict[str, Any] = Field(default_factory=dict, description="预留扩展字段，临时字段先放这里")

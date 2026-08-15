@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: school-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: edu_agent
+    ports:
+      - "5432:5432"
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    shm_size: 256m
+
+volumes:
+  postgres_data:
+
+## 项目架构
+# **ORM层**: 使用SQLAlchemy实现数据模型（支持PostgreSQL+向量数据库）
+# **数据层**: 支持双模式（模拟数据/真实数据库）
+# **日志系统**: 完整的结构化日志记录
+# **LangGraph**: AI工作流编排
+
+## 面试演示模式
+#设置 `DEMO_MODE=True` 可使用内存模拟数据快速演示  
+#选型方案：用 SQLAlchemy 做 ORM 映射，封装 DAO/Service 层，AI 工具仅调用 Service 层的固定方法，不直接操作数据库。

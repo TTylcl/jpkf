@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 教育客服系统 - 聊天测试</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 900px;
+            height: 95vh;
+            display: flex;
+            gap: 12px;
+        }
+        /* ── 侧边栏 ── */
+        .sidebar {
+            width: 240px;
+            min-width: 240px;
+            background: #16213e;
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            overflow-y: auto;
+        }
+        .sidebar h3 {
+            font-size: 14px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        .sidebar label {
+            font-size: 12px;
+            color: #aaa;
+        }
+        .sidebar select, .sidebar input {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: none;
+            background: #0f3460;
+            color: #eee;
+            font-size: 13px;
+            outline: none;
+        }
+        .sidebar select:focus, .sidebar input:focus {
+            box-shadow: 0 0 0 2px #e94560;
+        }
+        .quick-btn {
+            width: 100%;
+            padding: 8px 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            text-align: left;
+            transition: opacity 0.2s;
+        }
+        .quick-btn.teacher { background: #2d6a4f; color: #d8f3dc; }
+        .quick-btn.parent  { background: #1b5a7a; color: #caf0f8; }
+        .quick-btn.admin  { background: #7b2d8b; color: #f0d6f5; }
+        .quick-btn.student { background: #5a4a1b; color: #f5e6c8; }
+        .quick-btn:hover { opacity: 0.8; }
+        .divider {
+            border-top: 1px solid #2a3a5a;
+            margin: 4px 0;
+        }
+        .info-row {
+            font-size: 11px;
+            color: #666;
+            display: flex;
+            justify-content: space-between;
+        }
+        /* ── 主聊天区 ── */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #16213e;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        }
+        .header {
+            padding: 14px 20px;
+            background: #0f3460;
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .header .role-badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #e94560;
+            color: #fff;
+        }
+        .chat-box {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .msg {
+            max-width: 82%;
+            padding: 10px 14px;
+            border-radius: 10px;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+            animation: fadeIn 0.25s;
+            font-size: 14px;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .msg.user   { align-self: flex-end; background: #0f3460; }
+        .msg.ai     { align-self: flex-start; background: #1a1a3e; }
+        .msg.tool   { align-self: flex-start; background: #2d2d1c; font-size: 12px; color: #ffd700; border-left: 3px solid #ffd700; }
+        .msg.error  { align-self: flex-start; background: #3e1a1a; color: #ff6b6b; font-size: 13px; }
+        .msg.system { align-self: center; background: transparent; color: #555; font-size: 11px; max-width: 100%; }
+        .input-area {
+            display: flex;
+            padding: 12px 16px;
+            gap: 10px;
+            background: #0f3460;
+            flex-shrink: 0;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 10px 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #16213e;
+            color: #eee;
+            outline: none;
+        }
+        .input-area input:focus { box-shadow: 0 0 0 2px #e94560; }
+        .input-area button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            background: #e94560;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+        }
+        .input-area button:hover { opacity: 0.9; }
+        .input-area button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .cursor::after { content: '▎'; animation: blink 1s step-end infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- ═══ 侧边栏 ═══ -->
+        <div class="sidebar">
+            <h3>👤 用户身份</h3>
+            <label>选择用户</label>
+            <select id="userIdSelect" onchange="onUserChange()">
+                <optgroup label="── 教师 ──">
+                    <option value="101" data-role="teacher">👨‍🏫 周明远 (钢琴)</option>
+                    <option value="102" data-role="teacher">👩‍🏫 吴雅芬 (钢琴)</option>
+                    <option value="103" data-role="teacher">👨‍🏫 郑浩然 (小提琴)</option>
+                    <option value="104" data-role="teacher">👩‍🏫 林婉清 (钢琴/小提琴)</option>
+                    <option value="105" data-role="teacher">👨‍🏫 陈思远 (钢琴/小提琴)</option>
+                </optgroup>
+                <optgroup label="── 家长 ──">
+                    <option value="301" data-role="parent" selected>👨‍👧 赵建国 (赵一辰父亲)</option>
+                    <option value="302" data-role="parent">👩‍👦 钱慧芳 (钱一诺母亲)</option>
+                    <option value="307" data-role="parent">👨‍👧 郑建国 (郑佳怡父亲)</option>
+                    <option value="313" data-role="parent">👩‍👦 沈月华 (三孩母亲)</option>
+                </optgroup>
+                <optgroup label="── 学生 ──">
+                    <option value="201" data-role="student">🎹 赵一辰 (钢琴)</option>
+                    <option value="202" data-role="student">🎹 钱一诺 (钢琴)</option>
+                    <option value="206" data-role="student">🎻 吴浩然 (小提琴)</option>
+                    <option value="209" data-role="student">🎻 冯诗涵 (小提琴)</option>
+                </optgroup>
+                <optgroup label="── 管理员 ──">
+                    <option value="1" data-role="admin">🔧 张校长 (管理员)</option>
+                </optgroup>
+            </select>
+
+            <h3>⚡ 快捷测试</h3>
+            <div class="divider"></div>
+            <label style="font-size:11px;color:#888;">🎓 教师操作</label>
+            <button class="quick-btn teacher" onclick="quickSend('帮我查一下今天的待办')">📋 查今日待办</button>
+            <button class="quick-btn teacher" onclick="quickSend('帮我查一下今天的排课')">📅 查今日排课</button>
+            <button class="quick-btn teacher" onclick="quickSend('帮我对排课ID为1的学生2进行消课')">✍️ 消课（排课1→学生2）</button>
+            <button class="quick-btn teacher" onclick="quickSend('查一下我的消课记录')">📊 查消课记录</button>
+            <div class="divider"></div>
+            <label style="font-size:11px;color:#888;">👨‍👧 家长操作</label>
+            <button class="quick-btn parent" onclick="quickSend('帮我查一下我的孩子的排课')">📅 查孩子排课</button>
+            <button class="quick-btn parent" onclick="quickSend('查一下我的通知')">🔔 查通知</button>
+            <button class="quick-btn parent" onclick="quickSend('帮我提交一个预排课申请')">📝 提交预排课</button>
+            <div class="divider"></div>
+            <label style="font-size:11px;color:#888;">👤 通用</label>
+            <button class="quick-btn student" onclick="quickSend('帮我查一下我的课表')">📅 查我的课表</button>
+            <button class="quick-btn admin" onclick="quickSend('帮我查一下所有排课')">📋 查全部排课</button>
+
+            <div class="divider"></div>
+            <div class="info-row"><span>会话ID:</span><span id="threadBadge" style="color:#888;">—</span></div>
+            <button onclick="courrent_thread_id=''; document.getElementById('threadBadge').textContent='—'; addMsg('🆕 已开启新会话', 'system');" style="width:100%;padding:6px;border:none;border-radius:6px;background:#333;color:#aaa;font-size:11px;cursor:pointer;">🔄 新会话</button>
+        </div>
+
+        <!-- ═══ 主聊天区 ═══ -->
+        <div class="main">
+            <div class="header">
+                🤖 AI 教育客服系统
+                <span class="role-badge" id="roleBadge">家长</span>
+                <span style="font-size:12px;color:#888;margin-left:auto;">SSE 流式</span>
+            </div>
+            <div class="chat-box" id="chatBox">
+                <div class="msg system">👋 欢迎使用 AI 教育客服系统。选择左侧用户身份后，可点击快捷按钮或手动输入测试。</div>
+            </div>
+            <div class="input-area">
+                <input id="userInput" placeholder="输入消息，按 Enter 发送..." />
+                <button id="sendBtn" onclick="send()">发送</button>
+                <button onclick="document.getElementById('chatBox').innerHTML=''; addMsg('🧹 已清屏', 'system');" style="background:#444;font-size:12px;">清屏</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chatBox');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const userIdSelect = document.getElementById('userIdSelect');
+        const roleBadge = document.getElementById('roleBadge');
+        const threadBadge = document.getElementById('threadBadge');
+
+        let courrent_thread_id = '';
+
+        // Enter 发送
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+        });
+
+        function onUserChange() {
+            const opt = userIdSelect.selectedOptions[0];
+            const role = opt.dataset.role || '未知';
+            roleBadge.textContent = role === 'teacher' ? '教师' : role === 'parent' ? '家长' : role === 'student' ? '学生' : role === 'admin' ? '管理员' : role;
+            roleBadge.style.background = role === 'teacher' ? '#2d6a4f' : role === 'parent' ? '#1b5a7a' : role === 'student' ? '#5a4a1b' : role === 'admin' ? '#7b2d8b' : '#e94560';
+        }
+        onUserChange(); // init
+
+        function quickSend(msg) {
+            userInput.value = msg;
+            send();
+        }
+
+        function scrollBottom() { chatBox.scrollTop = chatBox.scrollHeight; }
+
+        function addMsg(text, cls) {
+            const div = document.createElement('div');
+            div.className = 'msg ' + cls;
+            div.textContent = text;
+            chatBox.appendChild(div);
+            scrollBottom();
+            return div;
+        }
+
+        async function send() {
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            addMsg(message, 'user');
+            userInput.value = '';
+            sendBtn.disabled = true;
+
+            const aiDiv = addMsg('', 'ai');
+            aiDiv.classList.add('cursor');
+            let hasContent = false;
+
+            try {
+                const res = await fetch('/api/chat_stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: String(userIdSelect.value),
+                        thread_id: courrent_thread_id || null,
+                    }),
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const jsonStr = line.slice(6);
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            switch (data.type) {
+                                case 'text':
+                                    if (!hasContent) { hasContent = true; aiDiv.classList.remove('cursor'); }
+                                    aiDiv.textContent += data.content;
+                                    scrollBottom();
+                                    break;
+                                case 'tool_start':
+                                    addMsg(`🔧 调用工具: ${data.tool}\n📥 输入: ${data.input}`, 'tool');
+                                    break;
+                                case 'tool_end':
+                                    addMsg(`✅ 工具返回: ${data.tool}\n📤 ${data.output}`, 'tool');
+                                    break;
+                                case 'done':
+                                    aiDiv.classList.remove('cursor');
+                                    if (data.thread_id) {
+                                        courrent_thread_id = data.thread_id;
+                                        threadBadge.textContent = data.thread_id.slice(0, 12) + '…';
+                                        threadBadge.style.color = '#4ecca3';
+                                    }
+                                    break;
+                                case 'error':
+                                    aiDiv.classList.remove('cursor');
+                                    addMsg('❌ ' + data.message, 'error');
+                                    break;
+                            }
+                        } catch (_) { /* 跳过解析失败 */ }
+                    }
+                }
+                aiDiv.classList.remove('cursor');
+
+            } catch (err) {
+                aiDiv.classList.remove('cursor');
+                if (!hasContent) aiDiv.remove();
+                addMsg('❌ 连接失败: ' + err.message, 'error');
+            }
+
+            sendBtn.disabled = false;
+            userInput.focus();
+        }
+    </script>
+</body>
+</html>

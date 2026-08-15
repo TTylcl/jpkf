@@ -30,5 +30,5 @@ Thumbs.db
 *.model
 *.gguf
 *.safetensors
-models/
-model/
+/models/
+/model/

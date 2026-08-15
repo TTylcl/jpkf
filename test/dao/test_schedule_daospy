@@ -1,0 +1,127 @@
+import asyncio
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# 先导入模型和枚举
+from dal.models.schedule_model import Schedule
+from dal.models.enums import ScheduleActiveStatus
+
+# 导入 DAO 和数据库
+from dal.dao.schedule_dao import ScheduleDao
+from core.database import AsyncDatabase
+
+
+async def test_all_methods():
+    """完整测试 ScheduleDao 的所有方法 - 全栈ORM版本"""
+    # 1. 初始化数据库
+    TEST_PG_URI = "postgresql+asyncpg://postgres:123456@127.0.0.1:5434/test_database"
+    AsyncDatabase.init(TEST_PG_URI)
+
+    print("=" * 70)
+    print("ScheduleDao 所有方法完整测试（全栈ORM版本）")
+    print("=" * 70)
+
+    # 每个测试用新的 session
+    async with AsyncDatabase.get_session() as session:
+        dao = ScheduleDao(session)
+        test_schedule_id = None  # 存新增的排课ID
+
+        # ========== 1. create_schedule 新增排课 ==========
+        print("\n🔹 1. create_schedule（新增测试排课）")
+        new_schedule = await dao.create_schedule(
+            course_id=1001,
+            teacher_id=2001,
+            day_of_week=2,
+            start_time="09:00",
+            end_time="10:30",
+            classroom="A101"
+        )
+        test_schedule_id = new_schedule.id
+        print(f" 新增成功，ID: {test_schedule_id}")
+        print(f" ✅ 通过")
+
+        # ========== 2. get_by_id ==========
+        print("\n🔹 2. get_by_id（查刚新增的排课）")
+        schedule = await dao.get_by_id(test_schedule_id)
+        print(f" 结果: 课程ID={schedule.course_id}, 老师ID={schedule.teacher_id}" if schedule else " 结果: None")
+        print(f" ✅ 通过" if schedule else " ❌ 失败")
+
+        # ========== 3. get_course_schedules 按课程查询 ==========
+        print("\n🔹 3. get_course_schedules（查询课程ID=1001的所有排课）")
+        schedules = await dao.get_course_schedules(course_id=1001)
+        print(f" 返回: {len(schedules)} 条排课")
+        print(f" 前3条ID: {[s.id for s in schedules[:3]]}")
+        print(f" ✅ 通过")
+
+        # ========== 4. get_teacher_schedules 按老师查询 ==========
+        print("\n🔹 4. get_teacher_schedules（查询老师ID=2001的所有排课）")
+        schedules = await dao.get_teacher_schedules(teacher_id=2001)
+        print(f" 返回: {len(schedules)} 条排课")
+        print(f" 前3条ID: {[s.id for s in schedules[:3]]}")
+        print(f" ✅ 通过")
+
+        # ========== 5. get_day_schedules 按周几查询 ==========
+        print("\n🔹 5. get_day_schedules（查询周二的所有排课）")
+        schedules = await dao.get_day_schedules(day_of_week=2)
+        print(f" 返回: {len(schedules)} 条排课")
+        print(f" 前3条ID: {[s.id for s in schedules[:3]]}")
+        print(f" ✅ 通过")
+
+        # ========== 6. check_time_conflict 时间冲突检查 ==========
+        print("\n🔹 6. check_time_conflict（同老师同时间应该冲突）")
+        conflict = await dao.check_time_conflict(
+            teacher_id=2001,
+            day_of_week=2,
+            start_time="09:30"
+        )
+        print(f" 冲突结果: {conflict}")
+        print(f" ✅ 通过" if conflict else " ❌ 应该冲突但没检测到")
+
+        print("\n🔹 7. check_time_conflict（不同时间不冲突）")
+        no_conflict = await dao.check_time_conflict(
+            teacher_id=2001,
+            day_of_week=2,
+            start_time="11:00"
+        )
+        print(f" 冲突结果: {no_conflict}")
+        print(f" ✅ 通过" if not no_conflict else " ❌ 不该冲突但检测到了")
+
+        print("\n🔹 8. check_time_conflict（排除自身不冲突）")
+        exclude_conflict = await dao.check_time_conflict(
+            teacher_id=2001,
+            day_of_week=2,
+            start_time="09:30",
+            exclude_schedule_id=test_schedule_id
+        )
+        print(f" 冲突结果: {exclude_conflict}")
+        print(f" ✅ 通过" if not exclude_conflict else " ❌ 排除自身后不该冲突")
+
+        # ========== 9. update_schedule 更新排课 ==========
+        print("\n🔹 9. update_schedule（修改排课教室）")
+        updated = await dao.update_schedule(test_schedule_id, classroom="A202")
+        print(f" 修改后教室: {updated.classroom}" if updated else " 修改失败")
+        print(f" ✅ 通过" if updated and updated.classroom == "A202" else " ❌ 失败")
+
+        # ========== 10. schedule_exists 存在性检查 ==========
+        print("\n🔹 10. schedule_exists（检查刚新增的排课是否存在）")
+        exists = await dao.schedule_exists(test_schedule_id)
+        print(f" 存在结果: {exists}")
+        print(f" ✅ 通过" if exists else " ❌ 应该存在但查不到")
+
+        # ========== 11. soft_delete 软删排课 ==========
+        print("\n🔹 11. soft_delete（删除测试排课）")
+        delete_result = await dao.delete_schedule(test_schedule_id)
+        print(f" 删除结果: {delete_result}")
+        deleted_schedule = await dao.get_by_id(test_schedule_id)
+        print(f" 查询已删除排课: {deleted_schedule}")
+        print(f" ✅ 通过" if deleted_schedule is None else " ❌ 失败")
+
+        # session 自动关闭
+        print("\n" + "=" * 70)
+        print("✅ ✅ ✅ 所有方法测试完成！")
+        print("=" * 70)
+
+
+if __name__ == "__main__":
+    asyncio.run(test_all_methods())

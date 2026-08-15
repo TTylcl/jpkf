@@ -1,0 +1,347 @@
+================================================================================
+  Agent Router + Builder —— 设计文档
+================================================================================
+
+  定位：将权限校验、意图分类、三个 Agent 节点组装为 LangGraph StateGraph。
+
+  实现手段：LangGraph 的流程编排机制（节点 + 条件边 + State）。
+  核心目标：注意力隔离 —— 让 LLM 在不同任务下看到不同的 prompt 和工具集。
+
+  手段 ≠ 目标。Router 在 LangGraph 上的实现就是流程编排——定义节点、
+  控制流转、共享状态。但它要解决的核心问题不是"多步骤流程的差异化编排"，
+  而是"LLM 在多工具多任务场景下的注意力分散"。三个子图内部结构完全一样
+  （都是 ReAct），区别只在 prompt + 工具白名单——这说明编排的是注意力边界，
+  不是流程步骤。
+
+
+一、问题根因（2026-06-17 更新）
+
+  从 6 月 14 日日志中提取的 4 种工具调用模式：
+
+    模式 A（课程查询，正确）：
+      get_my_children → get_child_courses → get_course ×2      出现 4 次
+
+    模式 B（排课查询，正确）：
+      get_my_children → get_child_schedules                      出现 6 次
+
+    模式 C（混合查询，过度调用）：
+      get_my_children → get_child_courses → get_course ×2
+                      → get_child_schedules                      出现 2 次
+
+    模式 D（暴走）：
+      get_my_children → get_child_courses
+                      → get_child_schedules ×7                  出现 1 次
+
+  诊断结论：两个问题同时存在
+
+    问题 1：工具选择噪音（Router 能根治）
+      - LLM 在 7 个工具里犹豫，用"两个都调"来兜底
+      - 排课场景里不应该出现的 get_child_courses 被频繁调用
+      - rag_search 被传入空查询 → Pydantic 校验报错
+
+    问题 2：prompt 惯性（Router 部分缓解，子图 prompt 也要改）
+      - LLM 形成了"查完孩子 → 必查课程"的行为模式
+      - 这不是"不理解"，是"太理解"了——在一团规则里 LLM 自己总结了规律
+      - 子图 prompt 用极简规则打破这个惯性
+
+  不是"LLM 不理解用户输入"——LLM 理解了，但工具太多了。
+  不是"提示词写得不好"——是 prompt 里的规则碎片互相干扰。
+  本质问题是注意力分散，解法是注意力隔离。
+
+
+二、外层图结构
+
+  START
+    │
+    ▼
+  permission_check        ← 前置拦截，拒绝则短路到 END
+    │
+    ▼
+  classify_intent         ← 输出 intent 字段
+    │
+    ▼
+  route_by_intent         ← 条件边，读 intent（和 permission_denied）决定去向
+    │
+    ├── parent_schedule ──► schedule_agent ──► tools ──┐
+    ├── parent_course  ──► course_rag_agent ──► tools ─┤
+    └── general        ──► general_agent ──► tools ────┘
+                                                         │
+                                                         ▼
+                                                        END
+
+  说明：用三个 agent 节点代替三个子图，共享同一张图。
+       好处：一个 checkpoint、消息历史天然全图可见、调试简单。
+       三个 agent 节点 = 同一个 create_agent_node，传不同配置。
+       三种意图共用同一个 tool_node（tool_node 内部按 intent 选工具）。
+
+
+三、条件路由逻辑
+
+  route_by_intent(state) → 路由目标：
+
+    0. state.get("permission_denied") == True → END（不进入任何子图）
+    1. state.get("intent") == "parent_schedule" → "schedule_agent"
+    2. state.get("intent") == "parent_course"  → "course_rag_agent"
+    3. state.get("intent") == "general" 或其他 → "general_agent"
+
+  说明：
+    - 纯条件映射，不调 LLM，不查数据库
+    - 三个 agent 节点各自连到同一个 tools 节点
+    - tools 节点连回对应的 agent 节点
+
+
+四、三个 Agent 节点的配置
+
+  核心：都是 ReAct 循环，区别仅在于系统 prompt + 工具白名单。
+
+  ┌──────────────────┬──────────────────────┬──────────────────────────┐
+  │     节点          │       工具白名单      │       系统 prompt        │
+  ├──────────────────┼──────────────────────┼──────────────────────────┤
+  │ schedule_agent   │ get_my_children      │ 排课专用：只讲排课规则    │
+  │  (排课查询)      │ get_child_schedules  │ 先查孩子→再查排课→展示   │
+  │                  │                      │ 不出现 RAG、课程相关内容  │
+  ├──────────────────┼──────────────────────┼──────────────────────────┤
+  │ course_rag_agent │ rag_search           │ RAG 专用：只讲检索规则    │
+  │  (课程 RAG)      │ get_child_courses    │ 优先检索→查选课→标注来源  │
+  │                  │ get_my_children      │ 不出现排课相关内容        │
+  ├──────────────────┼──────────────────────┼──────────────────────────┤
+  │ general_agent    │ None（走 agent_role  │ 通用客服 prompt（已有）   │
+  │  (通用对话)      │  全量权限矩阵工具）  │ 无特殊约束               │
+  └──────────────────┴──────────────────────┴──────────────────────────┘
+
+  为什么三个 prompt 不能合并：
+    - 单 prompt 里写了排课规则 + RAG 规则 + 通用规则 = LLM 注意力分散
+    - LLM 看到的规则越多，每条规则的实际影响力越弱
+    - 极简 prompt（< 10 条规则）的正确率远高于大而全的 prompt
+
+  为什么不用子图而用节点：
+    - 子图 = 独立编译 + 独立 MemorySaver → 4 套 checkpoint，调试复杂
+    - 节点 = 共享一张图 → 1 套 checkpoint，消息全图可见
+    - 对你的场景（3 个意图，不需要子图级别的中断恢复），节点方案更优
+
+
+五、create_agent_node 的修改
+
+  当前签名：
+    create_agent_node(system_prompt: str = "")
+
+  修改后签名：
+    create_agent_node(
+        system_prompt: str = "",
+        tool_names: list[str] | None = None,  ← 新增
+    )
+
+  内部逻辑：
+    1. tool_names 不为 None → 从 agent_role 的权限矩阵工具中按名称取交集
+    2. tool_names 为 None → 走现有 _get_llm(agent_role) 逻辑（全量权限工具）
+
+  为什么和权限矩阵取交集而不是替代：
+    - agent_role 回答"谁在服务"（客服/教务/教师/学生）
+    - tool_names 回答"当前任务需要什么工具"（排课/课程/通用）
+    - 两者正交，交集 = 用户能用的 ∩ 任务需要的
+    - 即使 tool_names 里误放了不该用的工具，权限矩阵也能拦截
+
+  LLM 缓存策略变化：
+    - 原来：按 agent_role 缓存 → 缓存数 = agent_role 数量（≤4）
+    - 现在：按 (agent_role, frozenset(tool_names)) 缓存
+    - 缓存数 = 角色数 × 实际使用的白名单组合数，合理范围
+
+
+六、工具白名单（与权限矩阵取交集后）
+
+  ┌──────────────────┬──────────────────────────────────────────────┐
+  │      节点         │              最终可见工具                     │
+  ├──────────────────┼──────────────────────────────────────────────┤
+  │ schedule_agent   │ ["get_my_children", "get_child_schedules"]   │
+  ├──────────────────┼──────────────────────────────────────────────┤
+  │ course_rag_agent │ ["rag_search", "get_child_courses",          │
+  │                  │  "get_my_children"]                          │
+  ├──────────────────┼──────────────────────────────────────────────┤
+  │ general_agent    │ None（走 agent_role 权限矩阵全量工具）        │
+  └──────────────────┴──────────────────────────────────────────────┘
+
+  说明：
+    - 排课节点：只有 2 个工具，LLM 不可能调到 RAG 或课程工具
+    - RAG 节点：有 3 个工具，LLM 可以用 get_my_children 获取孩子列表
+    - 通用节点：全量工具，保持现有行为
+
+
+七、三个子 prompt 设计要点
+
+  7.1 排课专用 prompt（SCHEDULE_AGENT_PROMPT）
+      - 你的身份：排课查询助手
+      - 核心流程（唯一路径）：
+        ① get_my_children → 获取孩子列表
+        ② 对每个孩子调用 get_child_schedules
+        ③ 汇总展示："XX同学：XC课程 XX:XX-XX:XX"
+      - 时间处理：day_of_week 不传 = 今天
+      - 空结果处理按规则模板，不报"系统异常"
+      - 禁止：编造数据、跳步、调用非排课工具
+
+  7.2 RAG 专用 prompt（RAG_AGENT_PROMPT）
+      - 你的身份：课程咨询助手
+      - 核心流程：
+        ① 优先调用 rag_search 检索知识库
+        ② 需要查选课时配合 get_child_courses
+        ③ 基于检索结果回答，标注来源
+      - 检索无结果时如实告知
+      - 禁止：编造课程信息、调用排课工具
+
+  7.3 通用 prompt（EDUCATION_CUSTOMER_SERVICE_PROMPT）
+      - 已有，不变
+
+
+八、builder.py 的职责拆分
+
+  函数拆分：
+
+    get_router_graph()                  ← 单例缓存入口
+      └─ build_router_graph()           ← 实际构建
+
+    build_router_graph()
+      │
+      ├─ classify_intent_node           ← 已有，复用
+      ├─ permission_check_node          ← 已有，复用
+      │
+      ├─ create_agent_node(             ← 排课 Agent 节点
+      │     system_prompt=SCHEDULE_AGENT_PROMPT,
+      │     tool_names=["get_my_children", "get_child_schedules"],
+      │  )
+      ├─ create_agent_node(             ← RAG Agent 节点
+      │     system_prompt=RAG_AGENT_PROMPT,
+      │     tool_names=["rag_search", "get_child_courses", "get_my_children"],
+      │  )
+      ├─ create_agent_node(             ← 通用 Agent 节点（复用现有）
+      │     system_prompt=EDUCATION_CUSTOMER_SERVICE_PROMPT,
+      │     tool_names=None,            ← 走 agent_role 全量工具
+      │  )
+      │
+      ├─ dynamic_tool_node              ← 已有，复用（按 intent 映射到对应 tool_names）
+      │
+      ├─ 组装图：
+      │     graph.add_node("permission_check", permission_check_node)
+      │     graph.add_node("classify_intent", classify_intent_node)
+      │     graph.add_node("schedule_agent", schedule_agent_node)
+      │     graph.add_node("course_rag_agent", course_rag_agent_node)
+      │     graph.add_node("general_agent", general_agent_node)
+      │     graph.add_node("tools", dynamic_tool_node)
+      │
+      │     graph.add_edge(START, "permission_check")
+      │     graph.add_edge("permission_check", "classify_intent")
+      │     graph.add_conditional_edges("classify_intent", route_by_intent, {
+      │         "schedule_agent": "schedule_agent",
+      │         "course_rag_agent": "course_rag_agent",
+      │         "general_agent": "general_agent",
+      │         END: END,
+      │     })
+      │
+      │     # 各个 agent → tools → 回到各自 agent（ReAct 循环）
+      │     # 用条件边：agent 有 tool_calls → tools，否则 → END
+      │
+      └─ 编译 + MemorySaver
+
+
+九、classify_intent 的保障策略
+
+  三层防护，逐级兜底：
+
+  第一层：LLM 结构化分类（已有）
+    - temperature=0，with_structured_output(IntentResult)
+    - 注入时间上下文 + 用户画像 + 对话历史
+
+  第二层：关键词兜底（新增）
+    - 不替代 LLM，做交叉纠正
+    - 强信号词："今天""明天""几点""有课""上课" → 强制 parent_schedule
+    - LLM 分类与强信号词冲突时，用强信号覆盖
+
+  第三层：静默降级
+    - LLM 调用失败 → general
+    - 非 parent 角色 → general（业务短路）
+
+
+十、为什么选 Router 而不是其他模式（2026-06-17 讨论记录）
+
+  ┌──────────────────┬──────────┬──────────────────────────────────┐
+  │      模式         │  适合吗  │            原因                   │
+  ├──────────────────┼──────────┼──────────────────────────────────┤
+  │ 单 Agent + 大     │  ❌      │ 已经证明不行。prompt 规则互相干扰  │
+  │ prompt            │          │ LLM 在 7 个工具里选错。          │
+  ├──────────────────┼──────────┼──────────────────────────────────┤
+  │ Skills 模式       │  ❌      │ 工具过滤是软约束，LLM 仍能看到     │
+  │ （动态切 prompt） │          │ 不该用的工具。你的是硬隔离需求。   │
+  ├──────────────────┼──────────┼──────────────────────────────────┤
+  │ Deep Agents       │  ❌      │ 多一层编排器 LLM 做路由决策。      │
+  │ Orchestrator      │          │ 你的路由规则只有 3 条，不需要。    │
+  ├──────────────────┼──────────┼──────────────────────────────────┤
+  │ Supervisor Agent  │  ❌      │ 多 Agent 间需要协作通信。          │
+  │                   │          │ 你的场景排课和课程不需要互相通信。   │
+  ├──────────────────┼──────────┼──────────────────────────────────┤
+  │ Router + 专用     │  ✅      │ 同时解决工具噪音 + prompt 噪音。   │
+  │ Agent 节点        │          │ 硬隔离，不依赖 LLM 自觉。          │
+  └──────────────────┴──────────┴──────────────────────────────────┘
+
+  Router 在 LangGraph 上的实现手段就是流程编排（节点 + 条件边 + State）。
+  它要解决的核心问题是注意力隔离——三个 Agent 节点的 LLM 在排课场景里
+  根本不知道 RAG 存在。不是"告诉它别用 RAG"，是它脑子里没有 RAG 这回事。
+  手段是流程编排，目标是注意力隔离，两者不矛盾。
+
+  LangGraph 2026 年社区实践：
+  - Router 仍是四大核心多智能体模式之一（未被淘汰）
+  - 趋势是"小模型路由 + 大模型工作"，我们的 classify_intent 用 temperature=0
+    的分类 LLM 正是这个思路
+  - 新出的 Deep Agents Orchestrator 是"LLM 驱动的 Router"，适合路由规则
+    不确定的场景；我们路由规则明确，条件边更可靠
+
+
+十一、数据流
+
+  一个完整请求的 state 变化：
+
+    请求进入      state = {messages: [HumanMessage("小明今天有课吗")],
+                          user_id: 9, user_role: "parent",
+                          agent_role: "customer_service_agent"}
+
+    permission_check → state 不变（通过）
+
+    classify_intent  → state += {intent: "parent_schedule", day_of_week: null}
+
+    route_by_intent  → 读 intent → 路由到 schedule_agent
+
+    schedule_agent 第1轮  → tool_call: get_my_children(parent_id=9)
+    tools 第1轮           → state.messages += [ToolMessage(孩子列表)]
+    schedule_agent 第2轮  → tool_calls: [get_child_schedules(小明),
+                                         get_child_schedules(小红)]
+    tools 第2轮           → state.messages += [ToolMessage(小明排课),
+                                               ToolMessage(小红排课)]
+    schedule_agent 第3轮  → state.messages += [AIMessage("小明今天下午3:00有
+                                                         钢琴课...")]
+
+    返回用户              最终 AIMessage 即为用户看到的回复
+
+
+十二、与现有代码的兼容
+
+  - 现有 build_agent_graph() 保留为 deprecated，内部转为 build_router_graph()
+  - agent_node.py 的 create_agent_node 保持向后兼容（tool_names 默认 None）
+  - tool_node.py 的 dynamic_tool_node 需要改动：按 intent 而非 agent_role 选工具
+  - classify_intent.py 不变（已有）
+  - permission_check.py 不变（已有）
+  - AGENT_PERMISSIONS_MATRIX 不变——tool_names 与权限矩阵取交集，不替代
+
+
+十三、暂不做的优化
+
+  - Send[] API 显式并行：不做。LLM 一次发出多个 tool_calls 时 ToolNode 自动并行执行
+  - 排课结果缓存：不做。每次实时查询保证数据一致
+  - 子图间消息隔离：不做。共用 AgentState，消息历史全图可见
+  - Graph 层日志：暂不做。Service 层 @tool 装饰器已覆盖关键路径。
+    等需要排查"LLM 为什么选了 A 而不是 B"时再加。
+
+
+十四、现有代码已知 bug（待修）
+
+  1. dal/query/schedule_query_service.py:85 — row["id"] 应改为 row["schedule_id"]
+     （ScheduleItem 模型字段是 schedule_id，不是 id）
+
+  2. classify_intent.py — try 块成功分支缺少 return 语句
+     （LLM 分类成功后 result 没有返回，函数会落到空返回）

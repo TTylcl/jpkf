@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent-system"
 version = "0.1.0"
-description = "基于 LangChain 的 AI 情感分析智能体系统"
+description = "基于 LangGraph 的多模态教育客服智能体系统"
 readme = "README.md"
-requires-python = ">=3.10,<3.12"
+requires-python = ">=3.10,<3.15"
 license = {text = "MIT"}
 authors = [
     {name = "AI Agent Team", email = "example@example.com"}
 ]
-keywords = ["ai", "langchain", "emotion", "agent", "fastapi"]
+keywords = ["ai", "langgraph", "education", "agent", "fastapi", "pgvector"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -22,42 +22,39 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 
-# 核心依赖
+# 核心依赖（严格对应你的技术栈）
 dependencies = [
-    # LangChain 生态
+    # LangChain 生态（你指定 LangChain==1.2.14，其他 AI 相关用最新）
     "langchain==1.2.14",
     "langchain-core==1.2.25",
     "langchain-community==0.4.1",
     "langchain-openai==1.1.12",
-    "langchain-chroma==1.1.0",
+    "langgraph>=0.2.0",  # 新增：你指定的核心架构
     
     # Web 框架
     "fastapi==0.109.0",
     "uvicorn==0.27.0",
     "websockets==12.0",
     
+    # 数据库（PostgreSQL+pgvector）
+    "psycopg2-binary>=2.9.9",
+    "pgvector>=0.3.0",
+    "sqlalchemy>=2.0.23",
+    
     # 配置管理
     "python-dotenv==1.0.1",
     "pydantic==2.10.4",
     "pydantic-settings==2.13.1",
     
-    # TTS
-    "edge-tts==6.1.0",
-    
-    # 日志
+    # 日志（你要求的标准配置）
     "loguru==0.7.3",
     "python-json-logger==2.0.7",
     
-    # 观测与监控
-    "langfuse==2.30.0",
-    "opentelemetry-api==1.22.0",
-    "opentelemetry-sdk==1.22.0",
-    
-    # RAG 评估
-    "ragas==0.1.0",
-    "datasets==2.16.0",
-    #熔断
-    "pybreaker"==1.4.1
+    # 熔断器
+    "pybreaker==1.4.1",
+
+    # 后台任务调度（消课模块：每分钟扫描排课生成待办）
+    "apscheduler>=3.10.0",
 ]
 
 # 可选依赖组
@@ -90,19 +87,20 @@ lint = [
 
 # 入口点配置
 [project.scripts]
-ai-agent-emotion = "src.api.main:main"
+ai-agent-emotion = "main:app"
 
 # 工具配置
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["core*", "agent*", "api*", "service*", "dal*", "schemas*", "infrastructure*", "utils*"]
 
 [tool.pytest.ini_options]
-testpaths = ["test"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-asyncio_mode = "auto"
+filterwarnings = [
+    "ignore:Module already imported so cannot be rewritten:pytest.PytestAssertRewriteWarning",
+]
+testpaths = ["test/dal", "test/service"]
+asyncio_mode = "auto"  
+asyncio_default_fixture_loop_scope = "session"
 
 [tool.black]
 line-length = 88

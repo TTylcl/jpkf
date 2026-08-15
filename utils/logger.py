@@ -1,3 +1,5 @@
+
+# /utils/logger.py
 import sys
 from pathlib import Path
 from loguru import logger
@@ -6,7 +8,7 @@ import time
 from core import settings
 from typing import TYPE_CHECKING # 用于类型检查
 if TYPE_CHECKING: # 类型检查
-    from core.context import AgentContext # 导入数据类模块
+    from core.context import CTX # 导入数据类模块
 
 
 LOG_DIR = Path("logs")
@@ -19,7 +21,7 @@ logger.remove()
 logger.add(
     sys.stdout,
     colorize=True,
-    format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{extra[module]}</cyan> | {message}",
+    format="{time:HH:mm:ss} | {level: <8} | {extra[module]} | trace_id={extra[trace_id]: <20} | {message}",
     level=settings.LOG_DEFAULT_LEVEL
 )
 # 文件输出（按天分割，自动清理）
@@ -33,7 +35,7 @@ logger.add(
     
     level=settings.LOG_DEFAULT_LEVEL
 )
-def add_log( level: str, message: str, module: str = "system", ctx:Optional["AgentContext"]=None,**kwargs) -> None:
+def add_log( level: str, message: str, module: str = "system", ctx:Optional["CTX"]=None,**kwargs) -> None:
     """添加日志"""
 
     try:
@@ -55,11 +57,22 @@ def add_log( level: str, message: str, module: str = "system", ctx:Optional["Age
         "message": message,
         **kwargs # 扩展字段：比如请求ID、用户标识，按需加
     }
-    #如果传了ctx,先把数据存储起来       
-    if ctx: 
-        ctx.logs.append(log_record) 
-        if normalized_level == "ERROR":
-            ctx.error_logs.append(log_record)
+    # 确保必有 trace_id，避免 formatter 报错
+    kwargs.setdefault("trace_id", "N/A")
+    kwargs.setdefault("request_id", "N/A")
+    #如果传了ctx,先把数据存储起来
+    if ctx:
+        # 自动把追踪信息加到日志扩展字段里
+        kwargs["trace_id"] = ctx.trace_id
+        kwargs["request_id"] = ctx.request_id
+        # 自动把权限信息加到日志里，方便审计
+        kwargs["agent_role"] = ctx.agent_role
+        kwargs["user_id"] = ctx.user_id
+        kwargs["wx_openid"] = ctx.wx_openid
+        kwargs["client_ip"] = ctx.client_ip
 
+    if normalized_level == "ERROR":
+        # 输出错误日志 
+        logger.bind(module=module, **kwargs).error(message)
     getattr(logger.bind(module=module, **kwargs), normalized_level.lower())(message)
 
