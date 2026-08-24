@@ -91,4 +91,17 @@ DB_CONFIG_TEST = {
     "password": "123456",
     "cursor_factory": "RealDictCursor"
 }
+# 【9】认证配置（JWT）
+# ==============================================
+JWT_SECRET = "change-me-to-a-long-random-string"  # ⚠️  生产环境务必换成强随机串
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_DAYS = 7                                # token 有效期（天）
 
+# 【10】CORS 跨域配置
+# ==============================================
+# 只允许这些来源跨域访问。不要用 "*"：它和 allow_credentials=True 冲突，且等于对全网开放。
+CORS_ORIGINS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://localhost:5173",   # 常见前端 dev server，按需增删
+]

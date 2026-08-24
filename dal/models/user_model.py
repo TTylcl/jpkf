@@ -49,6 +49,10 @@ class User(Base):
         String(100),
         comment="电子邮箱"
     )
+    password_hash: Mapped[str | None] = mapped_column(
+        String(255),
+        comment="密码hash值"
+    )
     user_type: Mapped[UserType] = mapped_column(
         PGEnum(UserType, name="user_type_enum", create_type=False), # 不自动创建枚举，避免冲突
         default=UserType.STUDENT,

@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.language_models import BaseChatModel
+from utils.logger import add_log
 
 
 def create_chat_model(temperature: float = 0.1) -> ChatOpenAI:
@@ -26,13 +27,8 @@ def create_chat_model(temperature: float = 0.1) -> ChatOpenAI:
     base_url = os.getenv("LLM_BASE_DATA_URL")
     model_name = os.getenv("LLM_MODEL")
     
-    print("=" * 60)
-    print("🔧 创建 ChatModel 实例")
-    print("=" * 60)
-    print(f"模型名称：{model_name}")
-    print(f"API 地址：{base_url}")
-    print(f"温度参数：{temperature}")
-    
+    add_log("INFO", f"创建 ChatModel: model={model_name}, base_url={base_url}, temperature={temperature}", module="llm")
+
     return ChatOpenAI(
         api_key=api_key,
         base_url=base_url,
@@ -63,12 +59,8 @@ def bind_tools_to_llm(temperature: float = 0.1, agent_role: str | None = None,to
     tools = build_langchain_tools(agent_role=agent_role,tool_names=tool_names)
 
     # 3. 执行 bind_tools 将工具绑定到模型
-    print(f"\n🔗 绑定 {len(tools)} 个工具到 LLM...")
     model_with_tools = model.bind_tools(tools)
-
-    print("=" * 60)
-    print("✅ LLM 工具绑定完成")
-    print("=" * 60)
+    add_log("INFO", f"LLM 绑定 {len(tools)} 个工具完成", module="llm")
 
     # 4. 返回绑定后的 model
     return model_with_tools

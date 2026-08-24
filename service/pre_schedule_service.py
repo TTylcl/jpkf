@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from core.context import CTX
 from core.service.decorators import tool, ToolMeta
-from core.service.utils import get_dao
+from core.service.utils import get_dao, parse_preferred_time
 from core.service.models import ServiceResult
 from dal.dao.pre_schedule_dao import PreScheduleDao
 from dal.dao.parent_student_dao import ParentStudentDao
@@ -38,6 +38,8 @@ class PreScheduleService:
             "preferred_teacher_id": {"type": "integer", "description": "期望教师ID（可选）", "default": None},
         },
         require_permission=True,
+        owner_param="parent_id",
+        owner_roles=("parent",),
     ))
     async def submit_pre_schedule(
         self,
@@ -81,13 +83,30 @@ class PreScheduleService:
                 code=409,
                 trace_id=ctx.trace_id,
             )
-        # ③ 创建预排课
+        # ③ 解析 preferred_time → 结构化字段（解析失败当场拒绝，避免冲突检查静默漏检）
+        day_of_week = start_time = end_time = None
+        if preferred_time:
+            parsed = parse_preferred_time(preferred_time)
+            if parsed is None:
+                return ServiceResult.error(
+                    message=f"无法解析期望时间「{preferred_time}」，请使用「周X HH:MM-HH:MM」格式（如：周一 09:00-10:30）",
+                    code=400,
+                    trace_id=ctx.trace_id,
+                )
+            day_of_week = parsed["day_of_week"]
+            start_time = parsed["start_time"]
+            end_time = parsed["end_time"]
+
+        # ④ 创建预排课
         dao: PreScheduleDao = get_dao(ctx, self.dao_class)
         record = await dao.submit(
             student_id=student_id,
             course_id=course_id,
             preferred_time=preferred_time,
             preferred_teacher_id=preferred_teacher_id,
+            day_of_week=day_of_week,
+            start_time=start_time,
+            end_time=end_time,
         )
 
         return SubmitResponse(
@@ -287,6 +306,8 @@ class PreScheduleService:
             "page_size": {"type": "integer", "default": 20},
         },
         require_permission=True,
+        owner_param="parent_id",
+        owner_roles=("parent",),
     ))
     async def get_my_submissions(
         self, ctx: CTX, parent_id: int, page: int = 1, page_size: int = 20

@@ -110,16 +110,12 @@ class SqlalchemyBaseDAO(Generic[T]):
 
     async def soft_delete(self, record_id: Any) -> bool:
         """软删除"""
-        print(f"1. deleted_field值: {self.deleted_field}")  # ✅ 看是不是"deleted_at"
         instance = await self.get_by_id(record_id, include_deleted=True)
-        print(f"2. 找到instance: {instance is not None}")  # ✅ 看有没有查到记录
         if not instance:
             return False
         if self.deleted_field:
-            print(f"3. 进入赋值: {self.deleted_field} = {datetime.now()}")  # ✅ 看有没有进这个分支
             setattr(instance, self.deleted_field, datetime.now())
             await self.session.flush()
-            print(f"4. flush后值: {getattr(instance, self.deleted_field)}")  # ✅ 看赋值成功没
         return True
     async def paginate(
         self,

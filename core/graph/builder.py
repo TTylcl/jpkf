@@ -45,6 +45,7 @@ from core.graph.nodes.tool_node import dynamic_tool_node
 from core.graph.nodes.classify_intent import classify_intent_node
 from core.graph.nodes.permission_check import permission_check_node
 from core.graph.nodes.prefetch_node import prefetch_children_node
+from langchain_core.messages import ToolMessage
 from core.prompt_templates.base_templates import (
     ADMIN_PROMPT,
     TEACHER_PROMPT,
@@ -53,6 +54,7 @@ from core.prompt_templates.base_templates import (
     SCHEDULE_AGENT_PROMPT,
     RAG_AGENT_PROMPT,
 )
+from utils.logger import add_log
 
 # ══════════════════════════════════════════════════════════════
 # 工具白名单映射（intent → tool_names）
@@ -119,9 +121,7 @@ def build_router_graph() -> StateGraph:
 
       返回用户  最终 AIMessage 即为用户看到的回复
     """
-    print("=" * 60)
-    print("🔧 构建 Agent Router 图（permission → classify → 角色路由 → 6 Agent）")
-    print("=" * 60)
+    add_log("INFO", "构建 Agent Router 图（permission → classify → 角色路由 → 6 Agent）", module="graph")
 
     # ── 1. 初始化 StateGraph ──
     graph = StateGraph(AgentState, context_schema=AgentContext)
@@ -246,6 +246,12 @@ def build_router_graph() -> StateGraph:
         def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
             """LLM 发出了 tool_calls → 走 tools；无 tool_calls → END"""
             messages = state.get("messages", [])
+            #每次工具最多执行10次
+            t_count = sum(1 for m in messages if isinstance(m,ToolMessage))
+            
+            if t_count >= 10: 
+                return "__end__"
+     
             if not messages:
                 return "__end__"
             last_message = messages[-1]
@@ -304,16 +310,7 @@ def build_router_graph() -> StateGraph:
     memory = MemorySaver()
     app = graph.compile(checkpointer=memory)
 
-    print("=" * 60)
-    print("✅ Agent Router 图构建成功")
-    print("   permission_check → classify_intent → route_by_role_and_intent")
-    print("   ├── parent + schedule → schedule_agent")
-    print("   ├── parent + course   → course_rag_agent")
-    print("   ├── parent + general  → parent_service_agent")
-    print("   ├── admin             → admin_agent")
-    print("   ├── teacher           → teacher_agent")
-    print("   └── student           → student_agent")
-    print("=" * 60)
+    add_log("INFO", "Agent Router 图构建成功: permission_check → classify_intent → 角色路由", module="graph")
 
     return app
 

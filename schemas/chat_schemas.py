@@ -10,7 +10,7 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="allow") 
     
     message : str = Field(...,description="用户输入")
-    user_id: str = Field(...,description="用户ID")  
+    user_id: Optional[str] = Field(default=None, description="用户ID（已废弃：身份改从 token 读取，此字段仅为兼容保留）")  
     #agent_role: str = Field(default='customer_service_agent',description="智能体角色:customer_service_agent/edu_admin_agent/teacher_agent/student_agent")
     thread_id: Optional[str] = Field(default=None,description="会话ID,多轮对话传入")
     wx_openid: str = Field(default="", description="微信openid，群聊场景必传")

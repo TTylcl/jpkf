@@ -28,9 +28,10 @@ class ParentStudentService:
         description="查询家长绑定的所有学生",
         parameters={"parent_id": {"type": "integer"}},
         require_permission=True,
+        owner_param="parent_id",
+        owner_roles=("parent",),
     ))
     async def get_my_children(self, ctx: CTX, parent_id: int) -> ParentStudentListResponse | ServiceResult:
-        print(f"[DEBUG] self.resource = {self.resource}")
         dao: ParentStudentDao = get_dao(ctx, self.dao_class)
         students = await dao.get_parent_students(parent_id)
         return ParentStudentListResponse(items=students, total=len(students))
@@ -89,6 +90,8 @@ class ParentStudentService:
             "page_size": {"type": "integer", "default": 20},
         },
         require_permission=True,
+        owner_param="parent_id",
+        owner_roles=("parent",),
     ))
     async def get_child_courses(
         self,
@@ -136,6 +139,8 @@ class ParentStudentService:
             "day_of_week": {"type": "integer", "description": "星期几：1=周一...7=周日，不传=查整周", "default": None},
         },
         require_permission=True,
+        owner_param="parent_id",
+        owner_roles=("parent",),
     ))
     async def get_child_schedules(
         self,

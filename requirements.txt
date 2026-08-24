@@ -120,7 +120,6 @@ pure_eval==0.2.3
 pyarrow==23.0.1
 pyarrow-hotfix==0.7
 pybase64==1.4.3
-pybreaker==1.4.1
 pycparser==3.0
 pydantic==2.10.4
 pydantic-settings==2.13.1
@@ -179,3 +178,4 @@ xxhash==3.6.0
 yarl==1.23.0
 zipp==3.23.1
 zstandard==0.25.0
+pyjwt==2.10.1

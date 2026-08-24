@@ -3,7 +3,7 @@ core/graph/nodes/agent_node.py
 
 Agent节点 - 调用LLM决定下一步动作
 """
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
 from datetime import datetime
 from langgraph.runtime import Runtime
@@ -11,6 +11,8 @@ from core.context import AgentContext
 from agent.state import AgentState
 
 from langchain_core.language_models import BaseChatModel
+from circuit.breaker import llm_breaker, with_circuit_breaker
+from core import settings
 
 
 _llm_cache: dict[str, BaseChatModel] = {}
@@ -39,6 +41,17 @@ def _resolve_context(runtime: Runtime[AgentContext], config: RunnableConfig) -> 
         trace_id=cfg.get("trace_id", ""),
         wx_openid=cfg.get("wx_openid", ""),
     )
+
+
+def _llm_fallback(llm, messages):
+    """LLM 熔断降级：返回一条兜底消息，让 Agent 流程优雅结束而不是崩溃"""
+    return AIMessage(content=settings.CIRCUIT_DEGRADE_MESSAGE)
+
+
+@with_circuit_breaker(llm_breaker, _llm_fallback)
+async def _invoke_llm(llm, messages):
+    """真正调用 LLM（被熔断器保护：连续失败自动降级）"""
+    return await llm.ainvoke(messages)
 
 
 def create_agent_node(system_prompt: str = "",tool_names: list[str] | None = None):
@@ -109,7 +122,7 @@ def create_agent_node(system_prompt: str = "",tool_names: list[str] | None = Non
         ):
             messages = [SystemMessage(content=dynamic_prompt)] + list(messages)
 
-        response = await llm_with_tools.ainvoke(messages)
+        response = await _invoke_llm(llm_with_tools, messages)
         return {"messages": [response]}
 
     return agent_node

@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, String, DateTime, BigInteger, Index
-from sqlalchemy.dialects.postgresql import ENUM as PGEnum
+from sqlalchemy import ForeignKey, String, DateTime, BigInteger, Index, SmallInteger
+from sqlalchemy.dialects.postgresql import ENUM as PGEnum, TIME
 from dal.models.base_model import Base
 from dal.models.enums import PreScheduleStatus
 
@@ -35,6 +35,10 @@ class PreSchedule(Base):
         comment="课程ID"
     )
     preferred_time: Mapped[str | None] = mapped_column(String(100), comment="期望上课时间")
+    # 结构化时间字段（由 preferred_time 解析而来，用于冲突检查；老数据可能为 NULL）
+    day_of_week: Mapped[int | None] = mapped_column(SmallInteger, comment="期望星期几 1-7")
+    start_time: Mapped[object | None] = mapped_column(TIME, comment="期望开始时间")
+    end_time: Mapped[object | None] = mapped_column(TIME, comment="期望结束时间")
     preferred_teacher_id: Mapped[int | None] = mapped_column(
         ForeignKey("user_info.user_id", ondelete="SET NULL"),
         comment="期望教师ID"

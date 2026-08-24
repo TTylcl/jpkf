@@ -196,7 +196,7 @@
                     <option value="209" data-role="student">🎻 冯诗涵 (小提琴)</option>
                 </optgroup>
                 <optgroup label="── 管理员 ──">
-                    <option value="1" data-role="admin">🔧 张校长 (管理员)</option>
+                    <option value="1" data-role="admin001">🔧 张校长 (管理员)</option>
                 </optgroup>
             </select>
 
@@ -250,12 +250,36 @@
 
         let courrent_thread_id = '';
 
+        // ===== 一键登录（加鉴权后新增）=====
+        const USERS = {
+            '101': 'prof_zhou', '102': 'prof_wu', '103': 'prof_zheng', '104': 'prof_lin', '105': 'prof_chen',
+            '201': '赵一辰', '202': '钱一诺', '206': '吴浩然', '209': '冯诗涵',
+            '301': '赵建国', '302': '钱慧芳', '307': '郑建国', '313': '沈月华',
+            '1': 'admin001',   // 管理员
+        };
+        let authToken = '';   // 当前登录 token
+
+        async function loginAs(userId) {
+            const username = USERS[userId];
+            if (!username) { addMsg('❌ 该用户没有配置登录名，检查 USERS 表', 'error'); return null; }
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password: '123456' }),
+            });
+            if (!res.ok) { addMsg('❌ 登录失败（用户名或密码错）', 'error'); return null; }
+            const data = await res.json();
+            authToken = data.token;
+            return data.token;
+        }
+
         // Enter 发送
         userInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
         });
 
         function onUserChange() {
+            authToken = '';   // 切换用户后清空，下次发送时用新用户自动登录
             const opt = userIdSelect.selectedOptions[0];
             const role = opt.dataset.role || '未知';
             roleBadge.textContent = role === 'teacher' ? '教师' : role === 'parent' ? '家长' : role === 'student' ? '学生' : role === 'admin' ? '管理员' : role;
@@ -292,13 +316,19 @@
             let hasContent = false;
 
             try {
+                // 先确保登录拿到 token
+                if (!authToken) await loginAs(String(userIdSelect.value));
+                if (!authToken) { sendBtn.disabled = false; userInput.focus(); return; }
+
                 const res = await fetch('/api/chat_stream', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + authToken,   // ← 新增
+                    },
                     body: JSON.stringify({
                         message: message,
-                        user_id: String(userIdSelect.value),
-                        thread_id: courrent_thread_id || null,
+                        thread_id: courrent_thread_id || null,    // ← user_id 不再传
                     }),
                 });
 

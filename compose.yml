@@ -7,7 +7,8 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
+      # 生产环境务必通过 .env / 环境变量覆盖此密码
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
       POSTGRES_DB: edu_agent
     ports:
       - "5432:5432"

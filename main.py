@@ -7,12 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 # 路由
 from api.routers.ai_chat_router import router as ai_chat_router
+from api.routers.auth_router import router as auth_router
 from api.routers.debug_router import router as debug_router
 # 创建图
 from core.graph.builder import build_agent_graph
 from core.database import AsyncDatabase
 from core.scheduler import init_scheduler, shutdown_scheduler
 from core import settings
+from utils.logger import add_log
 
 
 @asynccontextmanager
@@ -26,14 +28,14 @@ async def lifespan(app: FastAPI):
     async with AsyncDatabase.get_session() as session:
         conn = await session.connection()
         await conn.run_sync(Base.metadata.create_all)
-    print("=========✅ 数据库表初始化完成========")
+    add_log("INFO", "数据库表初始化完成", module="system")
 
     # 启动时：构建 LangGraph ReAct 循环
     graph = build_agent_graph()
 
     app.state.graph = graph
 
-    print("=========✅ Graph初始化完成========")
+    add_log("INFO", "Graph初始化完成", module="system")
 
     # 启动后台调度器（每分钟扫描排课，自动生成待办+通知）
     init_scheduler()
@@ -41,7 +43,7 @@ async def lifespan(app: FastAPI):
     yield
     # 停止时清理资源
     shutdown_scheduler()
-    print("=========🛑 Graph清理完成========")
+    add_log("INFO", "Graph清理完成", module="system")
 
 
 #初始化FastAPI服务
@@ -52,12 +54,13 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源
-    allow_credentials=True,
-    allow_methods=["*"],  # 允许所有方法
-    allow_headers=["*"],  # 允许所有请求头
+    allow_origins=settings.CORS_ORIGINS,  # 显式白名单，避免 "*" 与 allow_credentials 冲突
+    allow_credentials=False,              # 鉴权用 Bearer 头而非 cookie，无需凭证
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 #注册路由
+app.include_router(auth_router,prefix="/api")
 app.include_router(ai_chat_router,prefix="/api")
 app.include_router(debug_router,prefix="/api")
 app.mount("/static", StaticFiles(directory="static"), name="static")

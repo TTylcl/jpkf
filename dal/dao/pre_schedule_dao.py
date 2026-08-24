@@ -30,13 +30,19 @@ class PreScheduleDao(SqlalchemyBaseDAO):
         course_id: int,
         preferred_time: str | None = None,
         preferred_teacher_id: int | None = None,
+        day_of_week: int | None = None,
+        start_time=None,
+        end_time=None,
     ) -> model:
-        """家长提交预排课申请，状态为待审核"""
+        """家长提交预排课申请，状态为待审核；结构化时间字段由调用方解析后传入"""
         return await self.create(
             student_id=student_id,
             course_id=course_id,
             preferred_time=preferred_time,
             preferred_teacher_id=preferred_teacher_id,
+            day_of_week=day_of_week,
+            start_time=start_time,
+            end_time=end_time,
             status=PreScheduleStatus.PENDING,
             submit_time=datetime.now(),
         )

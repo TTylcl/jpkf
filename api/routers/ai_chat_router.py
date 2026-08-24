@@ -2,7 +2,8 @@
 #api/routers/ai_chat_router.py
 
 import uuid
-from fastapi import APIRouter, Request, HTTPException
+from api.routers.auth_router import get_current_user
+from fastapi import APIRouter, Request, HTTPException, Depends
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import Runnable
 
@@ -19,7 +20,7 @@ from fastapi.responses import StreamingResponse
 from schemas.chat_schemas import ChatRequest, ChatResponse
 
 from core.database import AsyncDatabase
-from dal.dao.user_dao import UserDao
+
 from utils.logger import add_log
 ROLE_MAP = {
     "ADMIN": ("admin", "edu_admin_agent"),
@@ -43,7 +44,7 @@ def get_graph(request: Request)->Runnable:
 
 #对话接口
 @router.post('/chat',response_model=ChatResponse)
-async def chat(req:ChatRequest,request:Request):
+async def chat(req:ChatRequest,request:Request,current_user: dict = Depends(get_current_user)):
     """
     对话接口
     参数说明：
@@ -56,23 +57,18 @@ async def chat(req:ChatRequest,request:Request):
     graph = get_graph(request)
  
 
-    #1 构建上下文
-    async with AsyncDatabase.get_session() as session:
-        user_dao = UserDao(session)
-        user = await user_dao.get_by_id(int(req.user_id))
-        if not user:
-            return ChatResponse(code=400, message=f"用户不存在: {req.user_id}", reply="", thread_id='')
-        raw_role = user.user_type
-        mapping = ROLE_MAP.get(raw_role)
-        if not mapping:
-            return ChatResponse(code=400, message=f"未知用户类型: {raw_role}", reply="", thread_id='')
-        role, agent_role = mapping
+    # 1 身份来自 token（已由 get_current_user 校验）
+    user_id = current_user["user_id"]
+    mapping = ROLE_MAP.get(current_user["user_type"])
+    if not mapping:
+        return ChatResponse(code=403, message="无效的用户类型", reply="", thread_id="")
+    role, agent_role = mapping
     #2 会话管理 + 加载历史（先加载，不包含当前消息）
     async with AsyncDatabase.get_session() as session:
         from service.conversation_service import ConversationService
         conv_svc = ConversationService(session)
         session_info = await conv_svc.get_or_create_session(
-            user_id=int(req.user_id),
+            user_id=user_id,
             thread_id=req.thread_id
         )
         history_messages = await conv_svc.get_history_messages(session_info.session_id, limit=20)
@@ -83,7 +79,7 @@ async def chat(req:ChatRequest,request:Request):
     config = {
         "configurable": {
             "thread_id": thread_id,
-            "user_id": req.user_id,
+            "user_id": user_id,
             "user_role": role,
             "agent_role": agent_role,
             "trace_id": str(uuid.uuid4()),
@@ -120,14 +116,14 @@ async def chat(req:ChatRequest,request:Request):
     async with AsyncDatabase.get_session() as db_session:
         from service.conversation_service import ConversationService
         conv_svc = ConversationService(db_session)
-        await conv_svc.save_user_message(session_id, req.message, int(req.user_id))
+        await conv_svc.save_user_message(session_id, req.message, user_id)
         intent = result.get("intent", "")
         await conv_svc.save_ai_message(session_id, reply, intent=intent)
         add_log("INFO", f"消息已持久化 session_id={session_id} intent={intent}", module="ai_chat")
 
     return ChatResponse(code=200, message="success", reply=reply, thread_id=thread_id)
 @router.post('/chat_stream')
-async def chat_stream(req:ChatRequest,request:Request):
+async def chat_stream(req:ChatRequest,request:Request,current_user: dict = Depends(get_current_user)):
     """
     流式对话接口（SSE）
         每生成一个 token 就推送给前端，像 ChatGPT 那样逐字输出
@@ -137,23 +133,18 @@ async def chat_stream(req:ChatRequest,request:Request):
         返回： StreamingResponse - 流式响应
     """
     graph = get_graph(request)
-    #1用户身份-确定角色
-    async with AsyncDatabase.get_session() as session:
-        user_dao = UserDao(session)
-        user = await user_dao.get_by_id(int(req.user_id))
-        if not user:
-            raise HTTPException(status_code=400, detail=f"用户不存在: {req.user_id}")
-        raw_role = user.user_type
-        mapping = ROLE_MAP.get(raw_role)
-        if not mapping:
-            raise HTTPException(status_code=400, detail=f"未知用户类型: {raw_role}")
-        role, agent_role = mapping
+    # 1 身份来自 token
+    user_id = current_user["user_id"]
+    mapping = ROLE_MAP.get(current_user["user_type"])
+    if not mapping:
+        raise HTTPException(status_code=403, detail="无效的用户类型")
+    role, agent_role = mapping
     #2 会话管理 + 加载历史（先加载，不包含当前消息）
     async with AsyncDatabase.get_session() as session:
         from service.conversation_service import ConversationService
         conv_svc = ConversationService(session)
         session_info = await conv_svc.get_or_create_session(
-            user_id=int(req.user_id),
+            user_id=user_id,
             thread_id=req.thread_id
         )
         history_messages = await conv_svc.get_history_messages(session_info.session_id, limit=20)
@@ -166,7 +157,7 @@ async def chat_stream(req:ChatRequest,request:Request):
     config = {
         "configurable": {
             "thread_id": thread_id,
-            "user_id": req.user_id,
+            "user_id": user_id,
             "user_role": role,
             "agent_role": agent_role,
             "trace_id": trace_id,
@@ -203,7 +194,7 @@ async def chat_stream(req:ChatRequest,request:Request):
             async with AsyncDatabase.get_session() as db_session:
                 from service.conversation_service import ConversationService
                 c_svc = ConversationService(db_session)
-                await c_svc.save_user_message(session_id, req.message, int(req.user_id))
+                await c_svc.save_user_message(session_id, req.message, user_id)
                 if full_reply:
                     await c_svc.save_ai_message(session_id, full_reply)
                     add_log("INFO", f"[stream] 消息已持久化 session_id={session_id}", module="ai_chat")

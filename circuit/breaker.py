@@ -1,51 +1,124 @@
 # circuit/breaker.py
-import pybreaker
+"""熔断器 —— 保护下游依赖（LLM / RAG 等），连续失败自动降级
+
+为什么不用 pybreaker：
+- pybreaker 的 `call` 是同步的，`call_async` 依赖 tornado（本项目是 asyncio，未装 tornado），
+  无法直接用在 async 代码里。所以这里实现一个轻量、async 原生的熔断器，
+  状态机和 pybreaker 完全一致：closed → open → half_open → closed。
+
+三态语义：
+- closed（正常）：放行请求；连续失败达到 fail_max 则打开
+- open（熔断）：直接快速失败，不再打下游；过了 reset_timeout 进入 half_open
+- half_open（半开）：放行一个试探请求，成功→closed，失败→open
+"""
+import asyncio
+import time
 from functools import wraps
+
 from utils.logger import add_log
 from core import settings
 
-# --------------------------
-# 全局统一管理所有熔断器实例，每个下游依赖对应独立熔断器，阈值可配置
-# --------------------------
-# 大模型接口专用熔断器：阈值从配置读，不用硬编码
 
-llm_breaker = pybreaker.CircuitBreaker(
-    fail_max=settings.CIRCUIT_FAILURE_THRESHOLD,# 阈值
-    reset_timeout=settings.CIRCUIT_RECOVERY_TIME,# 熔断器重置时间
+class CircuitBreakerOpen(Exception):
+    """熔断器处于打开状态时抛出，供调用方捕获并降级"""
+
+
+class AsyncCircuitBreaker:
+    """异步熔断器：连续失败达到阈值则打开，冷却后进入半开探测"""
+
+    def __init__(self, name: str, fail_max: int, reset_timeout: int):
+        self.name = name
+        self.fail_max = fail_max              # 连续失败多少次后打开
+        self.reset_timeout = reset_timeout    # 打开后冷却多久（秒）进入半开
+        self._state = "closed"                # closed / open / half_open
+        self._failure_count = 0
+        self._opened_at = 0.0                 # 打开时刻（monotonic 秒）
+        self._lock = asyncio.Lock()
+
+    @property
+    def current_state(self) -> str:
+        return self._state
+
+    async def call(self, func, *args, **kwargs):
+        """按熔断器状态执行 func，返回结果
+
+        步骤：
+        1. open 且未冷却 → 抛 CircuitBreakerOpen（快速失败，不打下游）
+        2. open 但已冷却 → 转 half_open，放行一个试探请求
+        3. 真正调用 func；失败记一次、成功清零
+        """
+        # 步骤 1-2：状态判断（锁内，避免并发竞态）
+        async with self._lock:
+            if self._state == "open":
+                if time.monotonic() - self._opened_at < self.reset_timeout:
+                    raise CircuitBreakerOpen(f"熔断器[{self.name}]已打开，快速失败降级")
+                self._state = "half_open"
+
+        # 步骤 3：真正调用（锁外执行，不阻塞其他请求）
+        try:
+            result = await func(*args, **kwargs)
+        except Exception as e:
+            await self._on_failure(e)
+            raise
+        await self._on_success()
+        return result
+
+    async def _on_failure(self, exc: Exception) -> None:
+        """记录失败：计数 +1，达到阈值或半开期间失败则打开"""
+        async with self._lock:
+            self._failure_count += 1
+            if self._state == "half_open" or self._failure_count >= self.fail_max:
+                self._state = "open"
+                self._opened_at = time.monotonic()
+                add_log(
+                    "ERROR",
+                    f"熔断器[{self.name}]打开（连续失败 {self._failure_count} 次）",
+                    module="circuit",
+                )
+
+    async def _on_success(self) -> None:
+        """记录成功：清零失败计数，半开状态恢复为关闭"""
+        async with self._lock:
+            self._failure_count = 0
+            if self._state == "half_open":
+                self._state = "closed"
+                add_log("INFO", f"熔断器[{self.name}]恢复 closed", module="circuit")
+
+
+# ── 全局实例：每个下游依赖一个独立熔断器（阈值从配置读）──
+llm_breaker = AsyncCircuitBreaker(
     name="llm_breaker",
-    )
-# 查课接口专用熔断器（示例，所有下游依赖都可以在这里新增独立熔断器）
-course_api_breaker = pybreaker.CircuitBreaker(
-    fail_max=settings.CIRCUIT_FAILURE_THRESHOLD,#
+    fail_max=settings.CIRCUIT_FAILURE_THRESHOLD,
     reset_timeout=settings.CIRCUIT_RECOVERY_TIME,
-    name="course_api_circuit_breaker"
+)
+# 示例：其他下游依赖（如外部课程 API）可照此新增独立熔断器
+course_api_breaker = AsyncCircuitBreaker(
+    name="course_api_breaker",
+    fail_max=settings.CIRCUIT_FAILURE_THRESHOLD,
+    reset_timeout=settings.CIRCUIT_RECOVERY_TIME,
 )
 
-# --------------------------
-# 通用熔断装饰器：无侵入绑定到任意需要熔断的函数
-# --------------------------
-def with_circuit_breaker(breaker: pybreaker.CircuitBreaker,fallback_func):
+
+# ── 通用异步熔断装饰器：无侵入绑定到任意 async 函数 ──
+def with_circuit_breaker(breaker: AsyncCircuitBreaker, fallback_func):
+    """把任意 async 函数包上熔断保护
+
+    :param breaker: 熔断器实例
+    :param fallback_func: 熔断/失败时的降级函数，入参与原函数完全一致
+
+    注意：无论「单次失败」还是「熔断打开」，都会降级到 fallback_func，
+    避免把下游的内部错误直接暴露给用户；熔断器只负责「是否跳过调用 + 记账」。
     """
-    通用熔断装饰器
-    :param breaker: 对应下游依赖的熔断器实例
-    :param fallback_func: 熔断触发后的业务降级函数，入参和原函数完全一致
-    """
+
     def decorator(func):
         @wraps(func)
-        def wrapper(*args, **kwargs):
-            #拿到ctx
-            ctx = kwargs.get("ctx")
-            if ctx is None:
-                # 类方法第一个参数是self，从第二个参数开始找，跳过self避免误判
-                for arg in args[1:]:
-                    if hasattr(arg, "logs"):
-                        ctx = arg
-                        break
+        async def wrapper(*args, **kwargs):
             try:
-                return breaker.call(func, *args, **kwargs)
-            except pybreaker.CircuitBreakerError as e:
-                # 熔断触发，执行降级逻辑
-                add_log("ERROR", "熔断触发，执行降级逻辑：{}".format(e))
+                return await breaker.call(func, *args, **kwargs)
+            except Exception as e:
+                add_log("ERROR", f"熔断器[{breaker.name}]降级: {e}", module="circuit")
                 return fallback_func(*args, **kwargs)
+
         return wrapper
+
     return decorator

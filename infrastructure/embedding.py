@@ -18,6 +18,7 @@ from typing import List
 from dotenv import load_dotenv
 from langchain_core.embeddings import Embeddings
 from openai import OpenAI
+from utils.logger import add_log
 
 load_dotenv()
 
@@ -52,9 +53,7 @@ def create_embedding() -> MaaSEmbeddings:
     base_url = os.getenv("EMBEDDING_BASE_URL", os.getenv("LLM_BASE_DATA_URL"))
     model = os.getenv("EMBEDDING_MODEL", "text-embedding-v4")
 
-    print("===============创建 Embedding 模型实例 (MaaS)=====================")
-    print(f"  API: {base_url}")
-    print(f"  Model: {model}")
+    add_log("INFO", f"创建 Embedding 模型实例 (MaaS): model={model}, base_url={base_url}", module="embedding")
 
     _embedding_instance = MaaSEmbeddings(api_key=api_key, base_url=base_url, model=model)
     return _embedding_instance

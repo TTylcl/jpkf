@@ -18,6 +18,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 
 from core.context import AgentContext
+from utils.logger import add_log
 
 # 从 tools/loader.py 导入工具加载器
 from core.graph.tools.loader import build_langchain_tools
@@ -133,9 +134,7 @@ def create_service_tool_node(agent_role: str | None = None) -> tuple[ToolNode, l
     Returns:
         tuple: (tool_node, tools) - ToolNode 对象和工具列表
     """
-    print("=" * 60)
-    print(f"🔧 构建 Tool Node（带错误处理）" + (f" agent_role={agent_role}" if agent_role else ""))
-    print("=" * 60)
+    add_log("INFO", f"构建 Tool Node (agent_role={agent_role or 'all'})", module="graph")
 
     # 1. 加载工具（按角色过滤）
     tools = build_langchain_tools(agent_role=agent_role)
@@ -146,8 +145,7 @@ def create_service_tool_node(agent_role: str | None = None) -> tuple[ToolNode, l
         handle_tool_errors=_handle_service_result,  # ✅ 统一错误处理
     )
 
-    print("✅ ToolNode 构建成功（带 403/404/500 错误处理）")
-    print("=" * 60)
+    add_log("INFO", "ToolNode 构建成功（带 403/404/500 错误处理）", module="graph")
 
     return tool_node, tools
 

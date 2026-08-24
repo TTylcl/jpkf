@@ -134,6 +134,48 @@ AGENT_SYSTEM/
 
 二、核心架构：LangGraph Router 路由模式
 
+2.0 架构选型（技术选型与理由）
+
+  （1）Agent 编排框架 —— LangGraph StateGraph
+  理由：显式状态图让 permission→prefetch→classify→6路Agent 流程可读可维护；
+        checkpoint（MemorySaver + thread_id）做会话记忆；
+        Agent⇄tools 的 ReAct 循环用 conditional_edges 表达，无需手写循环。
+  对比：LangChain AgentExecutor（黑盒，难做多角色路由）/ 手写 while 循环（流程硬编码）。
+
+  （2）架构模式 —— Router 多 Agent（注意力隔离）
+  理由：按「角色×意图」拆 6 个独立 Agent，每个只看到自己的 prompt + 工具白名单，
+        从源头防幻觉/越权；非 parent 角色在 classify 层短路，省一次 LLM 调用。
+  对比：单 Agent + 全量工具集（工具越多越易误用）。
+
+  （3）意图分类 —— LLM 结构化输出
+  理由：自然语言灵活，Pydantic 结构化输出（IntentResult）直接路由。
+  对比：关键词正则（脆弱，无法覆盖口语化表达）。
+
+  （4）工具层 —— @tool 装饰器 + 反射自动发现
+  理由：新增工具零配置；统一权限校验/日志/异常捕获/脱敏；
+        AI 工具只调 Service 固定方法，不直接操作数据库（防注入/越权）。
+
+  （5）数据访问 —— 三层 Model → DAO → QueryService
+  理由：单表 CRUD 走 DAO，复杂多表查询走 QueryService，读写分离；软删除统一过滤。
+
+  （6）向量检索 —— pgvector（复用 PostgreSQL）
+  理由：复用现有 AsyncDatabase 连接池，不额外引入独立向量库，降低部署运维成本。
+  对比：独立向量库（ChromaDB / Milvus）需单独部署。
+
+  （7）技术栈一览
+  | 层级 | 选型 | 理由 |
+  |------|------|------|
+  | AI 框架 | LangGraph 1.1 + LangChain 1.2 | StateGraph 编排 + ReAct |
+  | LLM | GPT-4o（OpenAI 兼容接口） | API 代理调用 |
+  | Web | FastAPI + Uvicorn | 异步 + 原生 SSE 流式 |
+  | 数据库 | PostgreSQL 16 + pgvector | 业务 + 向量一库两用 |
+  | ORM | SQLAlchemy 2.0 async | AsyncSession + 连接池 |
+  | 向量 | text-embedding-3-small | 继承 LangChain Embeddings 基类，避免 tiktoken 问题 |
+  | 缓存 | Redis | 会话缓存 + 分布式锁 |
+  | 日志 | Loguru | 控制台彩色 + JSON 文件 |
+  | 熔断 | PyBreaker | LLM/API 调用保护 |
+  | 部署 | Docker Compose | PostgreSQL + pgvector |
+
 请求流：
   POST /api/chat_stream
     → 用户身份识别（DB 查 user_type → 映射 agent_role）

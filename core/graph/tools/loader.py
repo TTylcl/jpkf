@@ -25,6 +25,7 @@ from service.rag_service import RagService
 from service.lesson_consumption_service import LessonConsumptionService
 from service.teacher_todo_service import TeacherTodoService
 from service.notification_service import NotificationService
+from utils.logger import add_log
 
 
 # ✅ 所有需要暴露给 Agent 的 Service 实例（单例）
@@ -91,10 +92,6 @@ def build_langchain_tools(agent_role: str | None = None,tool_names: list[str] | 
     tools: list[StructuredTool] = []
     permissions = AGENT_PERMISSIONS_MATRIX.get(agent_role, {}) if agent_role else None
 
-    print("=" * 60)
-    print(f"🔧 加载 LangChain 工具" + (f"（agent_role={agent_role}）" if agent_role else ""))
-    print("=" * 60)
-
     for service in SERVICE_INSTANCES:
         resource = getattr(service, "resource", None)  # Service 的资源名
 
@@ -108,12 +105,10 @@ def build_langchain_tools(agent_role: str | None = None,tool_names: list[str] | 
 
             # ✅ 按 tool_names 白名单过滤（意图级别，比 agent_role 更细粒度）
             if tool_names is not None and tool_name not in tool_names:
-                print(f"⏭️  {service.__class__.__name__}.{method_name} -> {tool_name}（不在tool_names白名单，跳过）")
                 continue
             if permissions is not None:
                 allowed_ops = permissions.get(resource, [])
                 if tool_name not in allowed_ops:
-                    print(f"⏭️  {service.__class__.__name__}.{method_name} -> {tool_name}（无权限，跳过）")
                     continue
 
             description = meta.description
@@ -136,12 +131,7 @@ def build_langchain_tools(agent_role: str | None = None,tool_names: list[str] | 
             )
             tools.append(tool)
 
-            print(f"✅ {service.__class__.__name__}.{method_name} -> {tool_name}")
-
-    print("=" * 60)
-    print(f"🎉 共加载 {len(tools)} 个工具")
-    print("=" * 60)
-
+    add_log("INFO", f"加载 {len(tools)} 个工具 (agent_role={agent_role or 'all'})", module="tools")
     return tools
 
 

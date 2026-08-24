@@ -9,6 +9,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from core.context import CTX
 from core.database import AsyncDatabase
+from utils.logger import add_log
 
 def bind_ctx_to_tool(method: Any) -> Any:
     """
@@ -55,9 +56,7 @@ def bind_ctx_to_tool(method: Any) -> Any:
             try:
                 return await method(ctx,**call_input)
             except Exception as e:
-                    import traceback
-                    print(f"=== TOOL ERROR: {e}")
-                    traceback.print_exc()
+                    add_log("ERROR", f"工具执行失败: {e}", module="tool")
                     raise
             #调用方法
     return tool_coroutine

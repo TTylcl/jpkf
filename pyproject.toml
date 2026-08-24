@@ -35,6 +35,8 @@ dependencies = [
     "fastapi==0.109.0",
     "uvicorn==0.27.0",
     "websockets==12.0",
+    # 认证（JWT）
+    "pyjwt==2.10.1",
     
     # 数据库（PostgreSQL+pgvector）
     "psycopg2-binary>=2.9.9",
@@ -50,9 +52,6 @@ dependencies = [
     "loguru==0.7.3",
     "python-json-logger==2.0.7",
     
-    # 熔断器
-    "pybreaker==1.4.1",
-
     # 后台任务调度（消课模块：每分钟扫描排课生成待办）
     "apscheduler>=3.10.0",
 ]

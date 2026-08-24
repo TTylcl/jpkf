@@ -203,12 +203,12 @@ class ScheduleService:
             )
             if pre_teacher != teacher_id:
                 continue
-            parsed = _parse_preferred_time(pre.preferred_time or "")
-            if parsed is None:
+            # 结构化时间缺失（老数据/没填期望时间）→ 跳过，不误判
+            if pre.day_of_week is None or pre.start_time is None or pre.end_time is None:
                 continue
-            if parsed["day_of_week"] != day_of_week:
+            if pre.day_of_week != day_of_week:
                 continue
-            if not (check_start >= parsed["end_time"] or check_start < parsed["start_time"]):
+            if not (check_start >= pre.end_time or check_start < pre.start_time):
                 return ServiceResult.error(
                     message=f"该时段与待审核预排课冲突（"
                             f"学生「{pre.student.real_name if pre.student else f'ID:{pre.student_id}'}」，"
@@ -291,16 +291,13 @@ class ScheduleService:
             )
             if pre_teacher != teacher_id:
                 continue
-            # 解析 preferred_time 提取星期几和时间
-            parsed = _parse_preferred_time(pre.preferred_time or "")
-            if parsed is None:
-                continue  # 无法解析则跳过，不误判
-            if parsed["day_of_week"] != day_of_week:
+            # 结构化时间缺失（老数据/没填期望时间）→ 跳过，不误判
+            if pre.day_of_week is None or pre.start_time is None or pre.end_time is None:
                 continue
-            # 时间重叠判断
-            pre_start = parsed["start_time"]
-            pre_end = parsed["end_time"]
-            if not (check_start >= pre_end or check_start < pre_start):
+            if pre.day_of_week != day_of_week:
+                continue
+            # 时间重叠判断（结构化字段直接比较，无需再解析文本）
+            if not (check_start >= pre.end_time or check_start < pre.start_time):
                 has_pre_conflict = True
                 break
 
@@ -330,33 +327,6 @@ class ScheduleService:
 
 
 # ── 辅助 ──
-
-_DAY_MAP = {"周一": 1, "周二": 2, "周三": 3, "周四": 4, "周五": 5, "周六": 6, "周日": 7,
-            "星期一": 1, "星期二": 2, "星期三": 3, "星期四": 4, "星期五": 5, "星期六": 6, "星期日": 7}
-
-
-def _parse_preferred_time(preferred_time: str) -> dict | None:
-    """
-    尝试解析 preferred_time 字符串（如"周四 17:30-18:30"），提取结构化时间。
-    解析失败返回 None（调用方跳过，不误判冲突）。
-    """
-    import re
-    # 匹配：星期X HH:MM-HH:MM
-    m = re.match(r"(周[一二三四五六日]|星期[一二三四五六日])\s*(\d{1,2}:\d{2})\s*[-~至到]\s*(\d{1,2}:\d{2})", preferred_time)
-    if not m:
-        return None
-    day_str, start_str, end_str = m.groups()
-    day_of_week = _DAY_MAP.get(day_str)
-    if day_of_week is None:
-        return None
-    try:
-        start_parts = start_str.split(":")
-        end_parts = end_str.split(":")
-        start_time = dt_time(int(start_parts[0]), int(start_parts[1]))
-        end_time = dt_time(int(end_parts[0]), int(end_parts[1]))
-    except (ValueError, IndexError):
-        return None
-    return {"day_of_week": day_of_week, "start_time": start_time, "end_time": end_time}
 
 def _parse_time(value: str | None) -> dt_time | None:
     if not value:

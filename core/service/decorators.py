@@ -18,6 +18,8 @@ class ToolMeta:
     parameters: dict = field(default_factory=dict)
     require_permission: bool = True
     sensitive_output: bool = False
+    owner_param: str | None = None        # 声明"哪个参数必须等于当前登录人"
+    owner_roles: tuple = ()               # 只有这些 user_role 会被强制覆盖
 
 
 def tool(meta: ToolMeta):
@@ -35,6 +37,10 @@ def tool(meta: ToolMeta):
                         code=403,
                         trace_id=ctx.trace_id,
                     )
+
+            # 1.5 归属校验（IDOR 防护）：把"我的数据"参数强制改成当前登录人
+            if meta.owner_param and meta.owner_param in params and ctx.user_role in meta.owner_roles:
+                params[meta.owner_param] = ctx.user_id
 
             # 2. 执行
             try:

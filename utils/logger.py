@@ -71,8 +71,9 @@ def add_log( level: str, message: str, module: str = "system", ctx:Optional["CTX
         kwargs["wx_openid"] = ctx.wx_openid
         kwargs["client_ip"] = ctx.client_ip
 
+    # 统一按级别输出：ERROR 走 error，其余用 getattr 映射到对应级别方法（避免重复打印）
     if normalized_level == "ERROR":
-        # 输出错误日志 
         logger.bind(module=module, **kwargs).error(message)
-    getattr(logger.bind(module=module, **kwargs), normalized_level.lower())(message)
+    else:
+        getattr(logger.bind(module=module, **kwargs), normalized_level.lower())(message)
 

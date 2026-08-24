@@ -21,6 +21,9 @@ class PreScheduleResponse(BaseModel):
     course_id: int = Field(..., description="课程ID")
     course_name: Optional[str] = Field(None, description="课程名称")
     preferred_time: Optional[str] = Field(None, description="期望上课时间")
+    day_of_week: Optional[int] = Field(None, description="期望星期几 1-7")
+    start_time: Optional[str] = Field(None, description="期望开始时间 HH:MM")
+    end_time: Optional[str] = Field(None, description="期望结束时间 HH:MM")
     preferred_teacher_id: Optional[int] = Field(None, description="期望教师ID")
     preferred_teacher_name: Optional[str] = Field(None, description="期望教师姓名")
     status: str = Field(..., description="审核状态：pending=待审核, approved=通过, rejected=拒绝")
@@ -42,6 +45,9 @@ class PreScheduleResponse(BaseModel):
             course_id=record.course_id,
             course_name=getattr(record.course, "course_name", "") if record.course else "",
             preferred_time=record.preferred_time,
+            day_of_week=record.day_of_week,
+            start_time=record.start_time.strftime("%H:%M") if record.start_time else None,
+            end_time=record.end_time.strftime("%H:%M") if record.end_time else None,
             preferred_teacher_id=record.preferred_teacher_id,
             preferred_teacher_name=getattr(record.preferred_teacher, "real_name", "") if record.preferred_teacher else "",
             status=record.status.value if hasattr(record.status, "value") else record.status,

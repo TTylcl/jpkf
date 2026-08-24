@@ -5,13 +5,12 @@ api/routers/debug_router.py
 """
 import json
 import uuid
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
+from api.routers.auth_router import get_current_user
 from schemas.chat_schemas import ChatRequest
-from core.database import AsyncDatabase
-from dal.dao.user_dao import UserDao
 
 ROLE_MAP = {
     "ADMIN": ("admin", "edu_admin_agent"),
@@ -88,13 +87,10 @@ DEBUG_HTML = """<!DOCTYPE html>
   <div class="panel full">
     <h2>📝 输入</h2>
     <div class="row">
-      <label>用户ID</label>
-      <select id="user_id">
-        <option value="9">9 - 家长(张三)</option>
-        <option value="1">1 - 管理员</option>
-        <option value="2">2 - 老师</option>
-        <option value="8">8 - 学生(小明)</option>
-      </select>
+      <label>用户名</label>
+      <input id="username" value="admin001" placeholder="登录用户名">
+      <label>密码</label>
+      <input id="password" type="password" value="123456">
       <label>问题</label>
       <input id="question" value="钢琴课多少钱" placeholder="输入用户问题...">
       <button id="sendBtn" onclick="send()">发送</button>
@@ -128,12 +124,29 @@ DEBUG_HTML = """<!DOCTYPE html>
 </div>
 
 <script>
-let current_thread_id = ''; 
+let current_thread_id = '';
+let authToken = '';
+
+async function login() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error('登录失败: ' + t);
+  }
+  const data = await res.json();
+  authToken = data.token;
+  return authToken;
+}
 
 async function send() {
-   
+
   const question = document.getElementById('question').value.trim();
-  const user_id = document.getElementById('user_id').value;
   if (!question) return;
 
   const btn = document.getElementById('sendBtn');
@@ -148,10 +161,14 @@ async function send() {
   document.getElementById('stats').innerHTML = '';
 
   try {
+    if (!authToken) await login();
     const resp = await fetch('/api/debug/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id, message: question, thread_id: current_thread_id }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + authToken,
+      },
+      body: JSON.stringify({ message: question, thread_id: current_thread_id }),
     });
 
     // HTTP 错误
@@ -259,37 +276,26 @@ async def debug_panel():
 # ══════════════════════════════════════════════════════════════
 
 @router.post("/debug/chat")
-async def debug_chat(req: ChatRequest, request: Request):
+async def debug_chat(req: ChatRequest, request: Request, current_user: dict = Depends(get_current_user)):
     """
     调试用 Chat 接口：返回 RAG 召回片段、相似度、来源、最终回答等完整 trace。
+    身份来自 token（由 get_current_user 校验），不再信任请求体里的 user_id。
     """
     graph = get_graph(request)
 
-    # 1. 鉴权
-    try:
-        async with AsyncDatabase.get_session() as session:
-            user_dao = UserDao(session)
-            user = await user_dao.get_by_id(int(req.user_id))
-            if not user:
-                return {"error": f"用户不存在: {req.user_id}，请检查数据库中是否有该用户"}
-            raw_role = user.user_type
-            mapping = ROLE_MAP.get(raw_role)
-            if not mapping:
-                return {"error": f"未知用户类型: {raw_role}"}
-            role, agent_role = mapping
-    except Exception as e:
-        import traceback
-        return {
-            "error": f"数据库查询失败（表可能未建或无数据）: {str(e)}",
-            "detail": traceback.format_exc(),
-        }
+    # 1. 身份来自 token（修复 IDOR：不接受客户端传 user_id 冒充他人）
+    user_id = current_user["user_id"]
+    mapping = ROLE_MAP.get(current_user["user_type"])
+    if not mapping:
+        return {"error": f"未知用户类型: {current_user['user_type']}"}
+    role, agent_role = mapping
 
     # 2. 构建 config
     thread_id = req.thread_id or str(uuid.uuid4())
     config = {
         "configurable": {
             "thread_id": thread_id,
-            "user_id": req.user_id,
+            "user_id": user_id,
             "user_role": role,
             "agent_role": agent_role,
             "trace_id": str(uuid.uuid4()),

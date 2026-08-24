@@ -73,6 +73,8 @@ class UserService:
         parameters={"user_id": {"type": "integer", "description": "用户 ID"}},
         require_permission=True,
         sensitive_output=True,
+        owner_param="user_id",
+        owner_roles=("student",),
     ))
     async def get_user(self, ctx: CTX, user_id: int) -> ServiceResult:
         dao: UserDao = get_dao(ctx, self.dao_class)
