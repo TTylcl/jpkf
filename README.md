@@ -11,45 +11,27 @@
 
 ## 🏗️ 架构概览
 
+```mermaid
+flowchart LR
+    A[入口] --> B[JWT 鉴权]
+    B --> C[意图识别]
+    C --> D[六路 Agent 路由]
+    D --> E[ReAct 循环<br/>41 工具 · 读写 PG + pgvector]
+    E --> F[退出循环]
+    F --> G[存储对话]
+    G --> H[返回结果]
 ```
-用户消息（微信 / API）
-        │
-        ▼
-┌──────────────────┐
-│  permission_check │  ← JWT 鉴权 + 4 角色白名单
-└────────┬─────────┘
-         │ (通过)
-         ▼
-┌──────────────────┐
-│ prefetch_children │  ← 预加载家长的孩子列表
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│ classify_intent   │  ← LLM 结构化分类（3 路意图）
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────────────────────────────┐
-│            角色 × 意图路由                │
-│  6 个专用 Agent，各自独立的 prompt + 工具白名单 │
-│                                          │
-│  parent × schedule → schedule_agent       │
-│  parent × course   → course_rag_agent     │
-│  parent × general  → parent_service_agent │
-│  admin             → admin_agent          │
-│  teacher           → teacher_agent        │
-│  student           → student_agent        │
-└────────┬─────────────────────────────────┘
-         │
-         ▼
-    ┌────────┐
-    │  Tool  │  ← 41 个工具，按角色 + 意图双重过滤
-    │  Node  │
-    └───┬────┘
-        │ (ReAct 循环，直到 LLM 决定结束)
-        ▼
-    AI 自然语言回复
+
+**六路路由明细**（角色 × 意图 → 对应 Agent）：
+
+```mermaid
+flowchart LR
+    R{角色 × 意图} --> P1[schedule_agent<br/>家长 · 排课]
+    R --> P2[course_rag_agent<br/>家长 · 课程]
+    R --> P3[parent_service_agent<br/>家长 · 通用]
+    R --> A2[admin_agent<br/>教务]
+    R --> T[teacher_agent<br/>教师]
+    R --> S[student_agent<br/>学生]
 ```
 
 **核心设计理念：注意力隔离** — 按「角色 × 意图」把 LLM 拆成 6 个专用 Agent，每个 Agent 只看到自己相关的 prompt 和工具白名单，避免工具误用、规则互相干扰和越权。
