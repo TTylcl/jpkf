@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688)](https://fastapi.tiangolo.com/)
-[![LangGraph](https://img.shields.io/badge/LangGraph-1.1.6-orange)](https://langchain-ai.github.io/langgraph/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-1.2.4-orange)](https://langchain-ai.github.io/langgraph/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-pgvector-blue)](https://www.postgresql.org/)
 
 ---
@@ -16,7 +16,7 @@
         │
         ▼
 ┌──────────────────┐
-│  permission_check │  ← 身份校验（4角色白名单）
+│  permission_check │  ← JWT 鉴权 + 4 角色白名单
 └────────┬─────────┘
          │ (通过)
          ▼
@@ -26,20 +26,25 @@
          │
          ▼
 ┌──────────────────┐
-│ classify_intent   │  ← LLM 结构化分类（3路意图）
+│ classify_intent   │  ← LLM 结构化分类（3 路意图）
 └────────┬─────────┘
          │
-    ┌────┼────┐
-    ▼    ▼    ▼
-┌────┐┌────┐┌──────┐
-│排课││课程││ 通用  │  ← 三个专用 Agent，各自独立的 prompt + 工具集
-│Agent││Agent││Agent │
-└──┬─┘└──┬─┘└──┬───┘
-   │     │      │
-   └─────┼──────┘
+         ▼
+┌──────────────────────────────────────────┐
+│            角色 × 意图路由                │
+│  6 个专用 Agent，各自独立的 prompt + 工具白名单 │
+│                                          │
+│  parent × schedule → schedule_agent       │
+│  parent × course   → course_rag_agent     │
+│  parent × general  → parent_service_agent │
+│  admin             → admin_agent          │
+│  teacher           → teacher_agent        │
+│  student           → student_agent        │
+└────────┬─────────────────────────────────┘
+         │
          ▼
     ┌────────┐
-    │  Tool  │  ← 23个工具，按角色+意图双重过滤
+    │  Tool  │  ← 41 个工具，按角色 + 意图双重过滤
     │  Node  │
     └───┬────┘
         │ (ReAct 循环，直到 LLM 决定结束)
@@ -47,7 +52,7 @@
     AI 自然语言回复
 ```
 
-**核心设计理念：注意力隔离** — 不同任务下 LLM 只看到相关的 prompt 和工具，避免幻觉和越权。
+**核心设计理念：注意力隔离** — 按「角色 × 意图」把 LLM 拆成 6 个专用 Agent，每个 Agent 只看到自己相关的 prompt 和工具白名单，避免工具误用、规则互相干扰和越权。
 
 ---
 
@@ -55,13 +60,13 @@
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
-| AI 框架 | LangGraph 1.1, LangChain 1.2 | ReAct 循环 + StateGraph 编排 |
-| LLM | GPT-4o（OpenAI 兼容接口） | 通过 API 代理调用 |
-| Web | FastAPI 0.109 + Uvicorn | 异步 HTTP 服务 |
+| AI 框架 | LangGraph 1.2, LangChain 1.3 | ReAct 循环 + StateGraph 编排 |
+| LLM | 火山方舟（豆包） | 通过 OpenAI 兼容接口调用 |
+| Web | FastAPI 0.109 + Uvicorn | 异步 HTTP 服务（含 SSE 流式） |
 | 数据库 | PostgreSQL 16 + pgvector | 业务数据 + 向量存储 |
 | ORM | SQLAlchemy 2.0 异步 | AsyncSession + 连接池 |
-| 向量 | OpenAI Embeddings | text-embedding-3-small |
-| 缓存 | Redis | 会话缓存 + 分布式锁 |
+| 向量 | 阿里云 text-embedding-v4 | OpenAI 兼容 Embedding 接口 |
+| 缓存 | Redis | 缓存 + 分布式锁 |
 | 日志 | Loguru | 控制台彩色 + JSON 文件 |
 | 熔断 | PyBreaker | LLM/API 调用保护 |
 | 部署 | Docker Compose | PostgreSQL + pgvector |
@@ -95,10 +100,16 @@ cp .env.example .env
 `.env` 关键配置：
 
 ```env
+# LLM（火山方舟，OpenAI 兼容接口）
 LLM_API_KEY=sk-your-key-here
-LLM_BASE_URL=https://your-api-proxy/v1/chat/completions
-LLM_BASE_DATA_URL=https://your-api-proxy/v1/
-LLM_MODEL=gpt-4o
+LLM_BASE_URL=https://ark.cn-beijing.volces.com/api/v3/chat/completions
+LLM_BASE_DATA_URL=https://ark.cn-beijing.volces.com/api/v3/
+LLM_MODEL=ep-xxx-xxx            # 火山方舟推理接入点 ID
+
+# Embedding（阿里云百炼 MaaS，OpenAI 兼容接口）
+EMBEDDING_API_KEY=sk-your-key-here
+EMBEDDING_BASE_URL=https://ws-xxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+EMBEDDING_MODEL=text-embedding-v4
 
 # 数据库
 DB_HOST=localhost
@@ -190,13 +201,18 @@ open http://localhost:8000/api/debug
 
 ## 🎯 核心特性
 
-### 1. 三路意图分类（Router 架构）
+### 1. 六路角色路由（Router 架构）
 
-| 意图 | 触发条件 | 路由到 |
-|------|----------|--------|
-| `parent_schedule` | 有时间锚点："今天""周三""几点" | schedule_agent |
-| `parent_course` | 无时间锚点 + 问内容："有什么课""多少钱" | course_rag_agent |
-| `general` | 退费/地址/闲聊/问候 | general_agent |
+路由分两级：先按角色（4 种）分发，家长角色再按意图（3 路）细分。
+
+| 角色 | 意图 | 路由到 |
+|------|------|--------|
+| parent（家长/客服） | `parent_schedule`：有时间锚点（"今天""周三""几点"） | schedule_agent |
+| parent（家长/客服） | `parent_course`：问内容（"有什么课""多少钱"） | course_rag_agent |
+| parent（家长/客服） | `general`：退费/地址/闲聊/问候 | parent_service_agent |
+| admin（教务） | —（非家长角色短路到 general） | admin_agent |
+| teacher（教师） | —（非家长角色短路到 general） | teacher_agent |
+| student（学生） | —（非家长角色短路到 general） | student_agent |
 
 分类时注入三层上下文：
 - **对话历史压缩** — 消除指代歧义（"那明天呢"知道"那"指什么）
@@ -214,7 +230,7 @@ permission_check（粗粒度）     AGENT_PERMISSIONS_MATRIX（细粒度）
   agent_role 白名单              @tool 装饰器自动校验
 ```
 
-4 种角色 × 7 个资源域 × 读写分离，每个工具调用都经过权限校验。
+4 种角色 × 10 个资源域 × 读写分离，每个工具调用都经过权限校验。
 
 ### 3. 工具系统（@tool 装饰器）
 
@@ -272,6 +288,8 @@ agent_system/
 │   ├── context.py             # CTX 全链路上下文
 │   ├── database.py            # AsyncDatabase 连接池
 │   ├── settings.py            # 全局配置
+│   ├── security.py            # 密码哈希 + JWT 签发/校验
+│   ├── scheduler.py           # APScheduler 定时任务（消课扫描）
 │   ├── dao/                   # DAO 基类
 │   │   └── sqlalchemy_base_dao.py
 │   ├── graph/                 # LangGraph 工作流
@@ -292,7 +310,7 @@ agent_system/
 │       └── utils.py           # 脱敏 + DAO 获取
 │
 ├── dal/                       # 数据访问层
-│   ├── models/                # ORM 表模型（7张表）
+│   ├── models/                # ORM 表模型（12 张表）
 │   ├── dao/                   # 单表 CRUD
 │   └── query/                 # 多表关联查询
 │
@@ -303,13 +321,20 @@ agent_system/
 │   ├── student_course_service.py  # 选课管理
 │   ├── parent_student_service.py  # 家长-学生关联
 │   ├── pre_schedule_service.py    # 预排课审核
+│   ├── lesson_consumption_service.py # 消课扣课时
+│   ├── teacher_todo_service.py    # 教师待办
+│   ├── notification_service.py    # 通知
+│   ├── conversation_service.py    # 会话/消息持久化
 │   └── rag_service.py         # RAG 知识库检索
 │
 ├── schemas/                   # Pydantic 数据模型
 ├── api/routers/               # HTTP 接口
+│   ├── ai_chat_router.py      # 对话 + SSE 流式
+│   ├── auth_router.py         # 登录/注册（JWT）
+│   └── debug_router.py        # 调试面板
 ├── infrastructure/            # 向量数据库 + Embedding
 ├── utils/                     # 日志 + Redis
-├── circuit/                   # 熔断器
+├── circuit/                   # 熔断器（PyBreaker）
 ├── scripts/                   # 初始化 + 建索引脚本
 ├── data/knowledge/            # RAG 知识库源文件
 ├── test/                      # 测试
@@ -353,14 +378,14 @@ pytest test/graph/         # Graph 集成测试
 ## 📋 路线图
 
 - [x] LangGraph ReAct 循环
-- [x] Router 三路意图分类
+- [x] Router 六路角色路由
 - [x] 双层权限控制
 - [x] RAG 知识库检索（pgvector）
 - [x] 预排课审核流程
 - [x] 可视化调试面板
-- [ ] SSE 流式输出
-- [ ] Redis 对话记忆持久化
-- [ ] API 鉴权（JWT）
+- [x] SSE 流式输出（/chat_stream）
+- [ ] Redis 对话记忆持久化（当前记忆存 PostgreSQL）
+- [x] API 鉴权（JWT）
 - [ ] 多模态支持（图片理解）
 - [ ] 可观测性（LangFuse tracing）
 - [ ] CI/CD Pipeline
