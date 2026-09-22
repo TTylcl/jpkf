@@ -116,7 +116,7 @@ def with_circuit_breaker(breaker: AsyncCircuitBreaker, fallback_func):
             try:
                 return await breaker.call(func, *args, **kwargs)
             except Exception as e:
-                add_log("ERROR", f"熔断器[{breaker.name}]降级: {e}", module="circuit")
+                add_log("ERROR", f"熔断器[{breaker.name}]降级: {type(e).__name__}", module="circuit")
                 return fallback_func(*args, **kwargs)
 
         return wrapper

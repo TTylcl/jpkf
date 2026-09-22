@@ -24,8 +24,8 @@ class ScheduleService:
     @tool(ToolMeta(
         name="query_schedules",
         description="灵活查询排课。支持按家长/学生/教师/课程/星期几/时间段组合过滤。"
-                    "不传任何过滤条件=查所有排课，不传day_of_week=查整周每天。默认按星期+时间升序排列。"
-                    "available_only=true 只返回未满员（少于2人）的已有排课时段（管理员视角用）。",
+                    "非管理员不传归属过滤条件时，默认只查自己的数据（教师看自己的课/学生看自己的课/家长看孩子的课）；"
+                    "管理员不传过滤条件=查所有排课。available_only=true 只返回未满员（少于2人）的排课时段。",
         parameters={
             "parent_id":      {"type": "integer", "description": "家长 ID（查所有孩子的课）", "default": None},
             "student_id":     {"type": "integer", "description": "学生 ID", "default": None},
@@ -54,6 +54,18 @@ class ScheduleService:
         page: int = 1,
         page_size: int = 20,
     ) -> ServiceResult:
+        # 未显式指定归属、且不是「查空位」场景时，非管理员默认只看自己的数据，
+        # 避免教师/学生/家长不传参数就拿到全量排课（含他人学生姓名/教室等）。
+        if (parent_id is None and student_id is None and teacher_id is None
+                and not available_only):
+            if ctx.agent_role == "teacher_agent":
+                teacher_id = ctx.user_id
+            elif ctx.agent_role == "student_agent":
+                student_id = ctx.user_id
+            elif ctx.agent_role == "customer_service_agent":
+                parent_id = ctx.user_id
+            # edu_admin_agent 不设默认，保持查全部
+
         qs = ScheduleQueryService(ctx.session)
 
         filters = ScheduleFilters(
@@ -72,7 +84,7 @@ class ScheduleService:
 
     @tool(ToolMeta(
         name="get_today_schedules",
-        description="查询指定日期的排课。不传任何参数返回今天全部排课（管理员用），可指定家长/学生/教师过滤。day_of_week 不传默认今天",
+        description="查询指定日期的排课。非管理员不传归属参数时默认只查自己的课（教师看自己的/学生看自己的/家长看孩子的）；管理员可看全部。day_of_week 不传默认今天",
         parameters={
             "parent_id":  {"type": "integer", "description": "家长 ID（可选）", "default": None},
             "student_id": {"type": "integer", "description": "学生 ID（可选）", "default": None},
@@ -107,9 +119,14 @@ class ScheduleService:
                 filters=ScheduleFilters(teacher_id=teacher_id, day_of_week=target_day)
             )
         else:
-            # 不传任何参数 → 返回当天所有排课（管理员视角）
+            # 未指定归属 → 非管理员默认只看自己的数据，管理员(edu_admin_agent)仍看全部
             result = await qs.query_schedules(
-                filters=ScheduleFilters(day_of_week=target_day)
+                filters=ScheduleFilters(
+                    teacher_id=ctx.user_id if ctx.agent_role == "teacher_agent" else None,
+                    student_id=ctx.user_id if ctx.agent_role == "student_agent" else None,
+                    parent_id=ctx.user_id if ctx.agent_role == "customer_service_agent" else None,
+                    day_of_week=target_day,
+                )
             )
 
         return ServiceResult.ok(data=result, trace_id=ctx.trace_id)

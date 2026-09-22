@@ -119,34 +119,37 @@ async def seed():
         print(f"{len(binds)}条家长绑定完成")
 
         # ── 排课 (使用 time 对象) ──
+        # 排课的 teacher_id 必须 = 课程表的任教教师（钢琴=101 周明远 / 小提琴=103 郑浩然）。
+        # 之前这里把 teacher_id 当轮值表乱填（102/104/105 混入），导致「教师能消课却不能排课」：
+        # 消课校验 schedule.teacher_id，排课校验 course.teacher_id，两者不一致就矛盾。
         sched = [
             # Mon
-            (1,101,1,time(9,0),time(10,0),"QinFang A"),(1,102,1,time(10,30),time(11,30),"QinFang A"),
-            (2,103,1,time(14,0),time(15,0),"QinFang B"),(1,104,1,time(15,30),time(16,30),"QinFang C"),
-            (2,104,1,time(17,0),time(18,0),"QinFang B"),
+            (1,101,1,time(9,0),time(10,0),"QinFang A"),(1,101,1,time(10,30),time(11,30),"QinFang A"),
+            (2,103,1,time(14,0),time(15,0),"QinFang B"),(1,101,1,time(15,30),time(16,30),"QinFang C"),
+            (2,103,1,time(17,0),time(18,0),"QinFang B"),
             # Tue
             (1,101,2,time(9,0),time(10,0),"QinFang A"),(2,103,2,time(10,30),time(11,30),"QinFang B"),
-            (1,105,2,time(14,0),time(15,0),"QinFang A"),(2,104,2,time(15,30),time(16,30),"QinFang B"),
-            (1,102,2,time(17,0),time(18,0),"QinFang C"),
+            (1,101,2,time(14,0),time(15,0),"QinFang A"),(2,103,2,time(15,30),time(16,30),"QinFang B"),
+            (1,101,2,time(17,0),time(18,0),"QinFang C"),
             # Wed
             (1,101,3,time(9,0),time(10,0),"QinFang A"),(2,103,3,time(10,30),time(11,30),"QinFang B"),
-            (1,105,3,time(14,0),time(15,0),"QinFang A"),(2,105,3,time(15,30),time(16,30),"QinFang B"),
-            (1,102,3,time(17,0),time(18,0),"QinFang C"),
+            (1,101,3,time(14,0),time(15,0),"QinFang A"),(2,103,3,time(15,30),time(16,30),"QinFang B"),
+            (1,101,3,time(17,0),time(18,0),"QinFang C"),
             # Thu
-            (1,102,4,time(9,0),time(10,0),"QinFang A"),(1,101,4,time(10,30),time(11,30),"QinFang A"),
-            (2,103,4,time(14,0),time(15,0),"QinFang B"),(2,104,4,time(15,30),time(16,30),"QinFang B"),
-            (1,105,4,time(17,0),time(18,0),"QinFang C"),
+            (1,101,4,time(9,0),time(10,0),"QinFang A"),(1,101,4,time(10,30),time(11,30),"QinFang A"),
+            (2,103,4,time(14,0),time(15,0),"QinFang B"),(2,103,4,time(15,30),time(16,30),"QinFang B"),
+            (1,101,4,time(17,0),time(18,0),"QinFang C"),
             # Fri
             (1,101,5,time(9,0),time(10,0),"QinFang A"),(2,103,5,time(10,30),time(11,30),"QinFang B"),
-            (1,102,5,time(14,0),time(15,0),"QinFang A"),(2,104,5,time(15,30),time(16,30),"QinFang B"),
-            (1,105,5,time(17,0),time(18,0),"QinFang C"),
+            (1,101,5,time(14,0),time(15,0),"QinFang A"),(2,103,5,time(15,30),time(16,30),"QinFang B"),
+            (1,101,5,time(17,0),time(18,0),"QinFang C"),
             # Sat
             (1,101,6,time(8,30),time(9,30),"QinFang A"),(2,103,6,time(9,0),time(10,0),"QinFang B"),
-            (1,102,6,time(10,0),time(11,0),"QinFang A"),(2,104,6,time(10,30),time(11,30),"QinFang B"),
-            (1,105,6,time(14,0),time(15,0),"QinFang C"),(2,105,6,time(15,30),time(16,30),"QinFang B"),
+            (1,101,6,time(10,0),time(11,0),"QinFang A"),(2,103,6,time(10,30),time(11,30),"QinFang B"),
+            (1,101,6,time(14,0),time(15,0),"QinFang C"),(2,103,6,time(15,30),time(16,30),"QinFang B"),
             # Sun
-            (1,102,7,time(9,0),time(10,0),"QinFang A"),(2,103,7,time(10,30),time(11,30),"QinFang B"),
-            (1,104,7,time(14,0),time(15,0),"QinFang C"),(2,104,7,time(15,30),time(16,30),"QinFang B"),
+            (1,101,7,time(9,0),time(10,0),"QinFang A"),(2,103,7,time(10,30),time(11,30),"QinFang B"),
+            (1,101,7,time(14,0),time(15,0),"QinFang C"),(2,103,7,time(15,30),time(16,30),"QinFang B"),
         ]
         for c,t,d,s,e,r in sched:
             await session.execute(text(

@@ -370,7 +370,8 @@ pytest test/graph/         # Graph 集成测试
 - [x] API 鉴权（JWT）
 - [ ] 多模态支持（图片理解）
 - [ ] 可观测性（LangFuse tracing）
-- [ ] CI/CD Pipeline
+- [x] CI（GitHub Actions：prompt 安全测试 + lint）
+- [ ] CD 部署流水线
 
 ---
 

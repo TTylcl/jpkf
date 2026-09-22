@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
 from datetime import datetime
 
 from langchain_core.messages import (
@@ -296,10 +298,14 @@ async def classify_intent_node(
     try:
         llm = _get_classifier_llm()
         structured_llm = llm.with_structured_output(IntentResult)
-        result: IntentResult = await structured_llm.ainvoke([
-            SystemMessage(content=system_message),
-            HumanMessage(content=human_message),
-        ])
+        timeout = float(os.getenv("LLM_TIMEOUT", "7"))  # 分类节点超时 7 秒
+        result: IntentResult = await asyncio.wait_for(
+            structured_llm.ainvoke([
+                SystemMessage(content=system_message),
+                HumanMessage(content=human_message),
+            ]),
+            timeout=timeout,
+        )
         # ✅ 显式提取纯 Python 值后丢弃 IntentResult 对象，
         #    防止 Pydantic 序列化 checkpoint 时泄露
         _intent: str = str(result.intent)

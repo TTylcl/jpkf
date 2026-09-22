@@ -78,6 +78,16 @@ class LessonConsumptionService:
             schedule_id, student_id
         )
         if existing:
+            # 已消过课但待办还挂着（历史 todo_date 过滤 bug 残留的 pending）→ 顺手清理，
+            # 否则会出现「已消课，但『我有什么没做的事』还列着这条待消课」的矛盾。
+            todo_dao = TeacherTodoDao(ctx.session)
+            stale_todos = await todo_dao.find_all(
+                schedule_id=schedule_id, student_id=student_id,
+                status=TodoStatus.PENDING.value,
+            )
+            for t in stale_todos:
+                await todo_dao.mark_done(t.id)
+                add_service_log("info", f"重复消课时清理残留待办 id={t.id}", ctx)
             return ServiceResult.error(
                 message=f"该排课已消过课（记录ID: {existing.id}），请勿重复操作",
                 code=409, trace_id=ctx.trace_id,
@@ -122,18 +132,42 @@ class LessonConsumptionService:
             f"学生#{student_id} 课程#{schedule.course_id} 排课#{schedule_id}", ctx)
 
         # ⑦ 标记对应待办为已完成
+        # 不按 todo_date 过滤：待办的 todo_date 是「上课日期」，教师可能隔天/之后才消课，
+        # 用 today 匹配会漏掉（如 9-05 的课 9-06 才消课），导致待办一直 pending。
         todo_dao = TeacherTodoDao(ctx.session)
-        today = date.today()
         todos = await todo_dao.find_all(
             schedule_id=schedule_id, student_id=student_id,
-            todo_date=today, status=TodoStatus.PENDING.value,
+            status=TodoStatus.PENDING.value,
         )
         for todo in todos:
             await todo_dao.mark_done(todo.id)
             add_service_log("info", f"待办 id={todo.id} 已自动标记为完成", ctx)
 
+        # ⑦.5 把该排课的「待消课提醒」通知标记为已读，否则消课后提醒还挂在列表里
+        notif_dao = NotificationDao(ctx.session)
+        pending_notifs = await notif_dao.find_all(
+            recipient_id=ctx.user_id,
+            notification_type=NotificationType.CONSUMPTION_PENDING.value,
+            ref_id=schedule_id,
+            is_read=False,
+        )
+        for n in pending_notifs:
+            await notif_dao.mark_as_read(n.id)
+            add_service_log("info", f"待消课提醒通知 id={n.id} 已标记已读", ctx)
+
         # ⑧ 通知家长：课时已消耗
         await self._notify_parents(ctx, student_id, schedule.course_id, record.id)
+
+        # 查名称：Schedule 只有 course_id 没有 course_name；record 是新建对象、关系未加载，
+        # 不能靠 record.course/student/teacher 取名称，这里显式查表
+        from dal.dao.course_dao import CourseDao
+        from dal.dao.user_dao import UserDao
+        _course = await CourseDao(ctx.session).get_by_id(schedule.course_id)
+        course_name = _course.course_name if _course else f"课程#{schedule.course_id}"
+        _stu = await UserDao(ctx.session).get_by_id(student_id)
+        student_name = _stu.real_name if _stu else f"ID:{student_id}"
+        _teacher = await UserDao(ctx.session).get_by_id(ctx.user_id)
+        teacher_name = _teacher.real_name if _teacher else ""
 
         # ⑨ 通知老师：消课完成
         notif_dao = NotificationDao(ctx.session)
@@ -142,17 +176,14 @@ class LessonConsumptionService:
             recipient_role="TEACHER",
             notification_type=NotificationType.CONSUMPTION_COMPLETED.value,
             title="消课完成",
-            content=f"您已完成「{schedule.course_name}」的消课，"
-                    f"学生「{enrollment.student.real_name if enrollment.student else f'ID:{student_id}'}」"
+            content=f"您已完成「{course_name}」的消课，"
+                    f"学生「{student_name}」"
                     f"剩余课时 {new_remaining}",
             ref_id=record.id,
             ref_type="lesson_consumption",
         )
 
-        # ⑩ 组装响应
-        course_name = record.course.course_name if record.course else ""
-        student_name = record.student.real_name if record.student else ""
-        teacher_name = record.teacher.real_name if record.teacher else ""
+        # ⑩ 组装响应（名称用上面查到的值，不再依赖 record 未加载的关系）
 
         return ConsumeResponse(
             id=record.id,

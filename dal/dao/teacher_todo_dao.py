@@ -51,6 +51,17 @@ class TeacherTodoDao(SqlalchemyBaseDAO):
         """按日期查教师待办"""
         return await self.find_all(teacher_id=teacher_id, todo_date=todo_date)
 
+    async def get_pending_todos(self, teacher_id: int) -> list[TeacherTodo]:
+        """查教师所有未完成（PENDING）的消课待办，跨日期。
+
+        老师可能昨天/更早的课忘了消，那些待办的 todo_date 是过去日期，
+        按 get_todos_by_date(teacher, today) 会漏掉，导致「有事」时看不到。
+        这里只按状态过滤、不按日期，把所有待消课的都拿出来。
+        """
+        return await self.find_all(
+            teacher_id=teacher_id, status=TodoStatus.PENDING.value
+        )
+
     async def mark_done(self, todo_id: int) -> TeacherTodo | None:
         """标记待办已完成——教师确认消课时调用"""
         return await self.update(

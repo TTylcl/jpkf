@@ -16,7 +16,7 @@ from langchain_core.language_models import BaseChatModel
 from utils.logger import add_log
 
 
-def create_chat_model(temperature: float = 0.1) -> ChatOpenAI:
+def create_chat_model(temperature: float = 0.1, streaming: bool = True) -> ChatOpenAI:
     """
     创建 ChatModel 实例
     从 .env 读取配置：API Key、Base URL、Model Name
@@ -26,19 +26,25 @@ def create_chat_model(temperature: float = 0.1) -> ChatOpenAI:
     api_key = os.getenv("LLM_API_KEY")
     base_url = os.getenv("LLM_BASE_DATA_URL")
     model_name = os.getenv("LLM_MODEL")
-    
-    add_log("INFO", f"创建 ChatModel: model={model_name}, base_url={base_url}, temperature={temperature}", module="llm")
+    # 读 LLM 超时（.env 里 LLM_TIMEOUT），默认 30 秒。
+    # 之前这里没设超时，火山 API 一旦挂起，await llm.ainvoke() 会无限等待，
+    # 熔断器只能兜「抛异常」、兜不了「挂起」，导致请求卡死、前端无回答。
+    timeout = float(os.getenv("LLM_TIMEOUT", "30"))
+
+    add_log("INFO", f"创建 ChatModel: model={model_name}, base_url={base_url}, temperature={temperature}, timeout={timeout}s", module="llm")
 
     return ChatOpenAI(
         api_key=api_key,
         base_url=base_url,
         model=model_name,
         temperature=temperature,
-        streaming=True,  # 开启流式输出
+        streaming=streaming,   #火山方舟流式 + tool_calls 模式会挂起，非流式兜底
+
+        request_timeout=timeout,  # 给 LLM 调用设超时：超时抛异常，交给熔断器/降级兜底
     )
 
 
-def bind_tools_to_llm(temperature: float = 0.1, agent_role: str | None = None,tool_names: list[str] | None = None) -> BaseChatModel:
+def bind_tools_to_llm(temperature: float = 0.1, agent_role: str | None = None,tool_names: list[str] | None = None, streaming: bool = True) -> BaseChatModel:
     """
     完整的 LLM 工具绑定流程
     1. 创建 ChatModel 实例
@@ -52,7 +58,7 @@ def bind_tools_to_llm(temperature: float = 0.1, agent_role: str | None = None,to
         tool_names: 可选，指定工具名称列表（None = 使用所有工具）
     """
     # 1. 创建 ChatModel 实例
-    model = create_chat_model(temperature)
+    model = create_chat_model(temperature,streaming=streaming)
 
     # 2. 获取工具列表（按角色过滤）
     from core.graph.tools.loader import build_langchain_tools

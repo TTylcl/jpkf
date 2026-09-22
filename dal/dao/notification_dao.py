@@ -8,7 +8,8 @@ dal/dao/notification_dao.py
 ③ CONSUMPTION_COMPLETED  — 消课后 → 家长 + 老师
 """
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, date
+from sqlalchemy import select
 from core.dao.sqlalchemy_base_dao import SqlalchemyBaseDAO
 from dal.models.notification_model import Notification
 
@@ -84,3 +85,28 @@ class NotificationDao(SqlalchemyBaseDAO):
             notification_type=notification_type,
             ref_id=ref_id,
         )
+
+    async def notification_exists_on_date(
+        self, recipient_id: int, notification_type: str, ref_id: int, on_date: date
+    ) -> bool:
+        """检查某用户在某天是否已收到过某排课的同类通知（同一天去重）。
+
+        用 created_at 落在 on_date 当天来判断，而不是 exists(recipient,type,ref_id) 一刀切——
+        否则每周重复的同一排课，第二周就会被上一周的同类型通知永久挡住，导致提醒漏发。
+        """
+        day_start = datetime.combine(on_date, datetime.min.time())
+        day_end = datetime.combine(on_date, datetime.max.time())
+        stmt = (
+            select(self.model.id)
+            .where(
+                self.model.recipient_id == recipient_id,
+                self.model.notification_type == notification_type,
+                self.model.ref_id == ref_id,
+                self.model.deleted_at.is_(None),
+                self.model.created_at >= day_start,
+                self.model.created_at <= day_end,
+            )
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None

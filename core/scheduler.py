@@ -140,42 +140,63 @@ async def _check_and_create_todos():
                             module="Scheduler", todo_id=todo.id,
                             teacher_id=schedule.teacher_id, student_id=ass.student_id)
 
-                    # ② 通知学生：上课提醒
+                    # ② 通知学生：上课提醒（当天去重，避免重复推送）
+                    if not await notif_dao.notification_exists_on_date(
+                        ass.student_id, NotificationType.CLASS_REMINDER.value,
+                        schedule.id, today
+                    ):
+                        await notif_dao.create_notification(
+                            recipient_id=ass.student_id,
+                            recipient_role="STUDENT",
+                            notification_type=NotificationType.CLASS_REMINDER.value,
+                            title="上课提醒",
+                            content=f"您有一节{course_name} 即将在 {schedule.start_time} 开始，"
+                                    f"教室: {schedule.classroom or '未指定'}，请准时参加。",
+                            ref_id=schedule.id,
+                            ref_type="schedule",
+                        )
+
+                # 汇总该排课的学生姓名，教师通知里带上，避免只看到课程名却不知道是哪个学生
+                student_names = "、".join(
+                    ass.student.real_name if ass.student else f"学生{ass.student_id}"
+                    for ass in assignments
+                )
+
+                # ③ 通知教师：上课提醒（当天去重，一门课只发一次）
+                course_name = course_names.get(schedule.course_id, f"课程{schedule.course_id}")
+                if not await notif_dao.notification_exists_on_date(
+                    schedule.teacher_id, NotificationType.CLASS_REMINDER.value,
+                    schedule.id, today
+                ):
                     await notif_dao.create_notification(
-                        recipient_id=ass.student_id,
-                        recipient_role="STUDENT",
+                        recipient_id=schedule.teacher_id,
+                        recipient_role="TEACHER",
                         notification_type=NotificationType.CLASS_REMINDER.value,
                         title="上课提醒",
-                        content=f"您有一节{course_name} 即将在 {schedule.start_time} 开始，"
-                                f"教室: {schedule.classroom or '未指定'}，请准时参加。",
+                        content=f"您有一节{course_name}（排课#{schedule.id}）"
+                                f"将在 {schedule.start_time} 开始，"
+                                f"学生：{student_names}，"
+                                f"教室: {schedule.classroom or '未指定'}，请准备上课。",
                         ref_id=schedule.id,
                         ref_type="schedule",
                     )
 
-                # ③ 通知教师：上课提醒（一门课只发一次）
-                await notif_dao.create_notification(
-                    recipient_id=schedule.teacher_id,
-                    recipient_role="TEACHER",
-                    notification_type=NotificationType.CLASS_REMINDER.value,
-                    title="上课提醒",
-                    content=f"您有一节排课#{schedule.id}（课程{schedule.course_id}）"
-                            f"将在 {schedule.start_time} 开始，"
-                            f"教室: {schedule.classroom or '未指定'}，请准备上课。",
-                    ref_id=schedule.id,
-                    ref_type="schedule",
-                )
-
-                # ④ 通知教师：课后待消课提醒
-                await notif_dao.create_notification(
-                    recipient_id=schedule.teacher_id,
-                    recipient_role="TEACHER",
-                    notification_type=NotificationType.CONSUMPTION_PENDING.value,
-                    title="待消课提醒",
-                    content=f"排课#{schedule.id}（课程{schedule.course_id}）已到上课时间，"
-                            f"请在下课后确认消课。可在待办列表中查看和操作。",
-                    ref_id=schedule.id,
-                    ref_type="schedule",
-                )
+                # ④ 通知教师：课后待消课提醒（当天去重）
+                if not await notif_dao.notification_exists_on_date(
+                    schedule.teacher_id, NotificationType.CONSUMPTION_PENDING.value,
+                    schedule.id, today
+                ):
+                    await notif_dao.create_notification(
+                        recipient_id=schedule.teacher_id,
+                        recipient_role="TEACHER",
+                        notification_type=NotificationType.CONSUMPTION_PENDING.value,
+                        title="待消课提醒",
+                        content=f"{course_name}（排课#{schedule.id}）已到上课时间，"
+                                f"学生：{student_names}，"
+                                f"请在下课后确认消课。可在待办列表中查看和操作。",
+                        ref_id=schedule.id,
+                        ref_type="schedule",
+                    )
 
                 add_log("info",
                         f"排课#{schedule.id} 调度完成：{student_count} 条待办 + 上课提醒 + 待消课提醒 已发送",
@@ -472,42 +493,62 @@ async def _catch_up_today():
                     )
                     student_count += 1
 
-                    # 补发上课提醒给学生
-                    await notif_dao.create_notification(
-                        recipient_id=ass.student_id,
-                        recipient_role="STUDENT",
-                        notification_type=NotificationType.CLASS_REMINDER.value,
-                        title="上课提醒",
-                        content=f"您有一节{course_name} 即将在 {schedule.start_time} 开始，"
-                                f"教室: {schedule.classroom or '未指定'}，请准时参加。",
-                        ref_id=schedule.id,
-                        ref_type="schedule",
-                    )
+                    # 补发上课提醒给学生（当天去重）
+                    if not await notif_dao.notification_exists_on_date(
+                        ass.student_id, NotificationType.CLASS_REMINDER.value,
+                        schedule.id, today
+                    ):
+                        await notif_dao.create_notification(
+                            recipient_id=ass.student_id,
+                            recipient_role="STUDENT",
+                            notification_type=NotificationType.CLASS_REMINDER.value,
+                            title="上课提醒",
+                            content=f"您有一节{course_name} 即将在 {schedule.start_time} 开始，"
+                                    f"教室: {schedule.classroom or '未指定'}，请准时参加。",
+                            ref_id=schedule.id,
+                            ref_type="schedule",
+                        )
 
                 if student_count > 0:
-                    # 教师上课提醒
-                    await notif_dao.create_notification(
-                        recipient_id=schedule.teacher_id,
-                        recipient_role="TEACHER",
-                        notification_type=NotificationType.CLASS_REMINDER.value,
-                        title="上课提醒",
-                        content=f"您有一节排课#{schedule.id}（课程{schedule.course_id}）"
-                                f"将在 {schedule.start_time} 开始，"
-                                f"教室: {schedule.classroom or '未指定'}，请准备上课。",
-                        ref_id=schedule.id,
-                        ref_type="schedule",
+                    course_name = course_names.get(schedule.course_id, f"课程{schedule.course_id}")
+                    # 汇总该排课的学生姓名
+                    student_names = "、".join(
+                        ass.student.real_name if ass.student else f"学生{ass.student_id}"
+                        for ass in assignments
                     )
-                    # 教师待消课提醒
-                    await notif_dao.create_notification(
-                        recipient_id=schedule.teacher_id,
-                        recipient_role="TEACHER",
-                        notification_type=NotificationType.CONSUMPTION_PENDING.value,
-                        title="待消课提醒",
-                        content=f"排课#{schedule.id}（课程{schedule.course_id}）已到上课时间，"
-                                f"请在下课后确认消课。可在待办列表中查看和操作。",
-                        ref_id=schedule.id,
-                        ref_type="schedule",
-                    )
+                    # 教师上课提醒（当天去重）
+                    if not await notif_dao.notification_exists_on_date(
+                        schedule.teacher_id, NotificationType.CLASS_REMINDER.value,
+                        schedule.id, today
+                    ):
+                        await notif_dao.create_notification(
+                            recipient_id=schedule.teacher_id,
+                            recipient_role="TEACHER",
+                            notification_type=NotificationType.CLASS_REMINDER.value,
+                            title="上课提醒",
+                            content=f"您有一节{course_name}（排课#{schedule.id}）"
+                                    f"将在 {schedule.start_time} 开始，"
+                                    f"学生：{student_names}，"
+                                    f"教室: {schedule.classroom or '未指定'}，请准备上课。",
+                            ref_id=schedule.id,
+                            ref_type="schedule",
+                        )
+                    # 教师待消课提醒（当天去重）
+                    if not await notif_dao.notification_exists_on_date(
+                        schedule.teacher_id, NotificationType.CONSUMPTION_PENDING.value,
+                        schedule.id, today
+                    ):
+                        await notif_dao.create_notification(
+                            recipient_id=schedule.teacher_id,
+                            recipient_role="TEACHER",
+                            notification_type=NotificationType.CONSUMPTION_PENDING.value,
+                            title="待消课提醒",
+                            content=f"{course_name}（排课#{schedule.id}）已到上课时间，"
+                                    f"学生：{student_names}，"
+                                    f"请在下课后确认消课。可在待办列表中查看和操作。",
+                            ref_id=schedule.id,
+                            ref_type="schedule",
+                        )
                     missed_count += 1
                     add_log("info",
                             f"补偿：排课#{schedule.id} 补生成 {student_count} 条待办 + 通知",

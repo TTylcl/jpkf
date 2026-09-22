@@ -50,7 +50,13 @@ class StudentCourseService:
     async def get_course_students(self, ctx: CTX, course_id: int) -> ServiceResult:
         dao: StudentCourseDao = get_dao(ctx, self.dao_class)
         students = await dao.list_course_students(course_id)
-        return ServiceResult.ok(data=students, trace_id=ctx.trace_id)
+        # 转成带 student_name 的响应结构，而不是直接返回 ORM 对象
+        # （直接返回 ORM 对象会变成 <StudentCourse(...)> 这种 repr，LLM 拿不到学生名字）
+        items = [StudentCourseResponse.from_orm_model(s) for s in students]
+        return ServiceResult.ok(
+            data=StudentCourseListResponse(items=items, total=len(items)),
+            trace_id=ctx.trace_id,
+        )
 
     @tool(ToolMeta(
         name="check_enrollment",

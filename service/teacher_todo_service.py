@@ -25,11 +25,11 @@ class TeacherTodoService:
 
     @tool(ToolMeta(
         name="get_my_todos",
-        description="查询教师自己的待办列表（含消课待办 + 待审核预排课）。默认查今天。登录后应主动调用。",
+        description="查询教师自己的待办列表（含消课待办 + 待审核预排课）。默认返回所有未完成事项（含昨天/更早没消的课），传 todo_date 才只看某天。登录后应主动调用。",
         parameters={
             "todo_date": {
                 "type": "string",
-                "description": "日期（YYYY-MM-DD 格式），不传默认今天",
+                "description": "日期（YYYY-MM-DD 格式），不传则返回所有未完成的消课待办",
                 "default": None,
             },
             "page": {"type": "integer", "default": 1},
@@ -61,7 +61,12 @@ class TeacherTodoService:
         items: list[TodoItem] = []
 
         # ── ① 消课待办 ──
-        records = await dao.get_todos_by_date(ctx.user_id, target_date)
+        # 默认查所有未完成（PENDING）的消课待办，不按日期——老师昨天/更早没消的课今天还能看到；
+        # 显式传 todo_date 才只查那一天。
+        if todo_date:
+            records = await dao.get_todos_by_date(ctx.user_id, target_date)
+        else:
+            records = await dao.get_pending_todos(ctx.user_id)
         for r in records:
             items.append(TodoItem(
                 id=r.id,
