@@ -163,6 +163,22 @@ def main():
         print(f"  ❌ 连接失败: {e}")
         return
 
+    # 4.5 确保 knowledge_chunks 表存在（原环境靠手工建表，这里补上自包含）
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS knowledge_chunks (
+            id SERIAL PRIMARY KEY,
+            chunk_text TEXT,
+            embedding vector,
+            source TEXT,
+            chunk_index INTEGER,
+            created_at TIMESTAMP
+        )
+    """)
+    conn.commit()
+    cursor.close()
+    print("  ✅ knowledge_chunks 表就绪")
+
     # 5. 清空旧数据
     print(f"\n[5] 清空旧数据")
     cursor = conn.cursor()

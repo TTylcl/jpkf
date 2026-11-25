@@ -6,12 +6,14 @@ scripts/seed_data.py
 import asyncio, sys
 sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, ".")
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from sqlalchemy import text
 from core.database import AsyncDatabase
 from core import settings
 from dal.models.base_model import Base
 
+
+from dal.models import __init__ as _  # 触发所有模型导入，确保 create_all 建全所有表
 
 async def seed():
     AsyncDatabase.init(database_url=settings.DB_URI_TEST)
@@ -28,7 +30,7 @@ async def seed():
         await session.commit()
         print("旧数据已清除")
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         # ── 教师 ──
         await session.execute(text(
@@ -206,6 +208,16 @@ async def seed():
         await session.commit()
         total_ss = (await session.execute(text("SELECT count(*) FROM student_schedule"))).scalar()
         print(f"{total_ss}条学生-排课绑定完成(每人每周2次课)")
+
+        # ── 复位自增序列 ──
+        # 显式插入了 user_id(101-313) / course_id(1,2)，但对应序列仍停在起点，
+        # 不复位的话，之后 ORM 自增会拿到已占用的 ID（尤其新课程会撞 course_id=1）。
+        for tbl, col in [("user_info", "user_id"), ("course_info", "course_id")]:
+            await session.execute(text(
+                f"SELECT setval(pg_get_serial_sequence('{tbl}','{col}'), COALESCE((SELECT MAX({col}) FROM {tbl}), 1))"
+            ))
+        await session.commit()
+        print("自增序列已复位")
 
         print("\n种子数据全部导入完成!")
         print("="*50)

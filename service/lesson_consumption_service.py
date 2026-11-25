@@ -11,7 +11,7 @@ service/lesson_consumption_service.py
 6. 通知家长（发 CONSUMPTION_COMPLETED 通知）
 """
 from __future__ import annotations
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 from core.context import CTX
 from core.service.decorators import tool, ToolMeta
@@ -124,7 +124,7 @@ class LessonConsumptionService:
             course_id=schedule.course_id,
             teacher_id=ctx.user_id,
             student_id=student_id,
-            consumed_at=datetime.now(),
+            consumed_at=datetime.now(timezone.utc),
             lesson_index=lesson_consumed,
         )
         add_service_log("info",

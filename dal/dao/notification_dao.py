@@ -8,7 +8,7 @@ dal/dao/notification_dao.py
 ③ CONSUMPTION_COMPLETED  — 消课后 → 家长 + 老师
 """
 from __future__ import annotations
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from sqlalchemy import select
 from core.dao.sqlalchemy_base_dao import SqlalchemyBaseDAO
 from dal.models.notification_model import Notification
@@ -62,14 +62,14 @@ class NotificationDao(SqlalchemyBaseDAO):
     async def mark_as_read(self, notification_id: int) -> Notification | None:
         """标记单条通知为已读"""
         return await self.update(
-            notification_id, is_read=True, read_at=datetime.now()
+            notification_id, is_read=True, read_at=datetime.now(timezone.utc)
         )
 
     async def mark_all_as_read(self, recipient_id: int) -> int:
         """批量标记某用户所有未读通知为已读，返回更新数量"""
         unread = await self.find_all(recipient_id=recipient_id, is_read=False)
         for n in unread:
-            await self.update(n.id, is_read=True, read_at=datetime.now())
+            await self.update(n.id, is_read=True, read_at=datetime.now(timezone.utc))
         return len(unread)
 
     async def get_unread_count(self, recipient_id: int) -> int:
@@ -94,8 +94,9 @@ class NotificationDao(SqlalchemyBaseDAO):
         用 created_at 落在 on_date 当天来判断，而不是 exists(recipient,type,ref_id) 一刀切——
         否则每周重复的同一排课，第二周就会被上一周的同类型通知永久挡住，导致提醒漏发。
         """
-        day_start = datetime.combine(on_date, datetime.min.time())
-        day_end = datetime.combine(on_date, datetime.max.time())
+        local_tz = datetime.now().astimezone().tzinfo
+        day_start = datetime.combine(on_date, datetime.min.time(), tzinfo=local_tz)
+        day_end = datetime.combine(on_date, datetime.max.time(), tzinfo=local_tz)
         stmt = (
             select(self.model.id)
             .where(

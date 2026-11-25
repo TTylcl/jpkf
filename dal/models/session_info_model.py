@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, TYPE_CHECKING
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, SmallInteger, String, DateTime, Index
+from sqlalchemy import ForeignKey, SmallInteger, String, DateTime, Index, BigInteger
 from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 from dal.models.base_model import Base
 from dal.models.enums import SessionType
@@ -27,6 +27,7 @@ class SessionInfo(Base):
     session_id: Mapped[int] = mapped_column(primary_key=True, comment="会话唯一标识")
     # 外键关联用户
     user_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("user_info.user_id", ondelete="CASCADE"),
         comment="用户ID"
     )
@@ -41,8 +42,8 @@ class SessionInfo(Base):
         default="active",
         comment="会话状态：active-进行中，closed-已关闭"
     )
-    start_time: Mapped[datetime] = mapped_column(DateTime, comment="会话开始时间")
-    end_time: Mapped[datetime | None] = mapped_column(DateTime, comment="会话结束时间")
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), comment="会话开始时间")
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="会话结束时间")
     satisfaction_score: Mapped[int | None] = mapped_column(
         SmallInteger,
         comment="满意度评分（1-5）"

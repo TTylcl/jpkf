@@ -1,6 +1,6 @@
 from typing import Optional, TYPE_CHECKING # 新增导入TYPE_CHECKING
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, Numeric, SmallInteger, Integer, Text, Index, ForeignKey
+from sqlalchemy import String, Numeric, SmallInteger, BigInteger, Integer, Text, Index, ForeignKey
 from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 from dal.models.base_model import Base
 from dal.models.enums import CourseType
@@ -24,7 +24,7 @@ class Course(Base):
 
     # ==================== 100%对齐你查的表字段，字段名/类型/可空/默认值完全一致 ====================
     course_id: Mapped[int] = mapped_column(
-        Integer, # 对应PG bigint，Python int兼容
+        BigInteger, # 对应PG bigint，Python int兼容
         primary_key=True,
         comment="课程唯一标识"
     )
@@ -43,6 +43,7 @@ class Course(Base):
         comment="课程类型：REGULAR=正课, TRIAL=体验课, SUMMER=暑假课"
     )
     teacher_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
         ForeignKey("user_info.user_id", ondelete="NO ACTION", name="fk_course_teacher"),
         comment="主讲教师ID，关联user_info.user_id"
     )

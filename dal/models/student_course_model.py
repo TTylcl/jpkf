@@ -1,8 +1,7 @@
 from typing import Optional, TYPE_CHECKING
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import BigInteger, ForeignKey, DateTime, Index, String, Integer,text,func
+from sqlalchemy import BigInteger, ForeignKey, DateTime, Index, String, Integer, text
 from datetime import datetime
-from sqlalchemy.dialects.postgresql import TIMESTAMP
 from dal.models.base_model import Base
 from dal.models.enums import StudentCourseStatus
 
@@ -22,14 +21,15 @@ class StudentCourse(Base):
             postgresql_where=text("deleted_at IS NULL")  # 只有未删除的才校验唯一
         ),
         Index("idx_status", "status"),
-        Index("idx_deleted_at", "deleted_at"),
         {"comment": "学生选课表"}
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="主键ID")
     student_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user_info.user_id", ondelete="CASCADE"), comment="学生ID")
     course_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("course_info.course_id", ondelete="CASCADE"), comment="课程ID")
-    enrolled_at: Mapped[Optional[str]] = mapped_column(TIMESTAMP, comment="选课时间")
+    enrolled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), comment="选课时间"
+    )
     status: Mapped[str] = mapped_column(
         String(20), 
         default=StudentCourseStatus.ACTIVE.value, 
@@ -37,17 +37,6 @@ class StudentCourse(Base):
     )
     purchased_lessons: Mapped[Optional[int]] = mapped_column(Integer, comment="购买课时")
     remaining_lessons: Mapped[Optional[int]] = mapped_column(Integer, comment="剩余课时")
-    # ✅ 优化4：补全软删架构必须的三个通用时间字段
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), comment="创建时间"
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), onupdate=func.now(), comment="更新时间"
-    )
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
-        TIMESTAMP, index=True, nullable=True, comment="删除时间"
-    )
-
     @property
     def is_active(self) -> bool:
         return self.status == StudentCourseStatus.ACTIVE.value

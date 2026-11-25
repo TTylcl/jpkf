@@ -36,6 +36,7 @@ class AsyncDatabase:
                 max_overflow=max_overflow,
                 pool_pre_ping=True,  # ✅ 连接健康检查
                 pool_recycle=3600,   # ✅ 1小时回收连接
+                connect_args={"ssl": "require"},  # Supabase 连接需要 SSL
             )
             
             cls._session_factory = async_sessionmaker(

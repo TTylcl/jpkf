@@ -20,3 +20,5 @@ from dal.models.lesson_consumption_model import LessonConsumption
 from dal.models.teacher_todo_model import TeacherTodo
 from dal.models.notification_model import Notification
 from dal.models.student_schedule_model import StudentSchedule
+from dal.models.student_course_model import StudentCourse
+from dal.models.pre_schedule_model import PreSchedule

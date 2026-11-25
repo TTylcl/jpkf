@@ -20,8 +20,7 @@ dal/models/teacher_todo_model.py
 from typing import Optional, TYPE_CHECKING
 from datetime import date, datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import BigInteger, String, Date, Index, ForeignKey, func
-from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy import BigInteger, String, Date, Index, ForeignKey, DateTime
 from dal.models.base_model import Base
 from dal.models.enums import TodoStatus
 
@@ -55,18 +54,7 @@ class TeacherTodo(Base):
         comment="状态：pending=待处理 / done=已完成 / cancelled=已取消"
     )
     completed_at: Mapped[Optional[datetime]] = mapped_column(
-        TIMESTAMP, nullable=True, comment="完成时间（教师确认消课的时间）"
-    )
-
-    # Base 继承的时间字段覆盖
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), comment="创建时间"
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), onupdate=func.now(), comment="更新时间"
-    )
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
-        TIMESTAMP, index=True, nullable=True, comment="删除时间"
+        DateTime(timezone=True), nullable=True, comment="完成时间（教师确认消课的时间）"
     )
 
     # 关联

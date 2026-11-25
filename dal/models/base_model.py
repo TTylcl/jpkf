@@ -41,6 +41,7 @@ class Base(DeclarativeBase):
         DateTime(timezone=True),
         nullable=True,
         default=None,
+        index=True,
         comment="删除时间"
     )
     

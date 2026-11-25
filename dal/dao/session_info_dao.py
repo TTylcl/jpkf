@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from datetime import datetime
+from datetime import datetime, timezone
 from core.dao.sqlalchemy_base_dao import SqlalchemyBaseDAO
 if TYPE_CHECKING:
     from dal.models.session_info_model import SessionInfo as Model
@@ -22,7 +22,7 @@ class SessionInfoDao(SqlalchemyBaseDAO):
         return await self.find_all(user_id=user_id, skip=skip, limit=limit)
     # 关闭会话
     async def close_session(self, session_id: int) -> Model | None:
-        return await self.update(session_id, status="closed", end_time=datetime.now())
+        return await self.update(session_id, status="closed", end_time=datetime.now(timezone.utc))
 
 
 

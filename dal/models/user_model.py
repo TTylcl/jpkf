@@ -6,7 +6,7 @@ dao/models/user_model.py
 ✅ 内置to_dict()方法，直接返回前端可直接用的字典格式
 """
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, SmallInteger, Index
+from sqlalchemy import String, SmallInteger, BigInteger, Index
 from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 
 from dal.models.base_model import Base # 仅依赖基础模型类
@@ -29,6 +29,7 @@ class User(Base):
 
     # ==================== 字段100%对齐表结构，类型/可空/默认值完全匹配 ====================
     user_id: Mapped[int] = mapped_column(
+        BigInteger,
         primary_key=True,
         comment="用户唯一标识，自增主键"
     )

@@ -2,7 +2,7 @@ from __future__ import annotations
 """ core/dao/sqlalchemy_base_dao.py 有状态DAO基类 - FastAPI依赖注入专用 """
 from typing import Any, Type, TypeVar, Generic
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select, Select, func
 
 from sqlalchemy.orm import DeclarativeBase
@@ -114,7 +114,7 @@ class SqlalchemyBaseDAO(Generic[T]):
         if not instance:
             return False
         if self.deleted_field:
-            setattr(instance, self.deleted_field, datetime.now())
+            setattr(instance, self.deleted_field, datetime.now(timezone.utc))
             await self.session.flush()
         return True
     async def paginate(

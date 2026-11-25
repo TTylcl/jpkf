@@ -75,7 +75,7 @@ def bind_tools_to_llm(temperature: float = 0.1, agent_role: str | None = None,to
 # 别名：兼容其他地方的导入
 get_llm_with_tools = bind_tools_to_llm
 
-__all__ = ["create_chat_model", "bind_tools_to_llm", "get_llm_with_tools","build_langchain_tools"]
+__all__ = ["create_chat_model", "bind_tools_to_llm", "get_llm_with_tools"]
 
 
 # 单独运行测试

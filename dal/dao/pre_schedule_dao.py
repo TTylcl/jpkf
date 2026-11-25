@@ -1,7 +1,7 @@
 """ dal/dao/pre_schedule_dao.py 预排课数据访问层 —— 纯单表操作 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from core.dao.sqlalchemy_base_dao import SqlalchemyBaseDAO
@@ -44,7 +44,7 @@ class PreScheduleDao(SqlalchemyBaseDAO):
             start_time=start_time,
             end_time=end_time,
             status=PreScheduleStatus.PENDING,
-            submit_time=datetime.now(),
+            submit_time=datetime.now(timezone.utc),
         )
 
     # ==================== 老师审核 ====================
@@ -61,7 +61,7 @@ class PreScheduleDao(SqlalchemyBaseDAO):
             pre_schedule_id,
             status=status,
             reviewer_id=reviewer_id,
-            review_time=datetime.now(),
+            review_time=datetime.now(timezone.utc),
             review_note=review_note,
         )
 

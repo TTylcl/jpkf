@@ -20,8 +20,7 @@ dal/models/notification_model.py
 from typing import Optional
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import BigInteger, String, Boolean, Text, Index, func
-from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy import BigInteger, String, Boolean, Text, Index, DateTime
 from dal.models.base_model import Base
 
 class Notification(Base):
@@ -61,18 +60,7 @@ class Notification(Base):
         Boolean, default=False, comment="是否已读（前端红点提示用）"
     )
     read_at: Mapped[Optional[datetime]] = mapped_column(
-        TIMESTAMP, nullable=True, comment="阅读时间（点击查看即标记）"
-    )
-
-    # Base 继承的时间字段覆盖
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), comment="创建时间"
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), onupdate=func.now(), comment="更新时间"
-    )
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
-        TIMESTAMP, index=True, nullable=True, comment="删除时间"
+        DateTime(timezone=True), nullable=True, comment="阅读时间（点击查看即标记）"
     )
 
     def __repr__(self) -> str:

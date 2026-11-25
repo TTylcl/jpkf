@@ -46,6 +46,7 @@ class ParentStudentDao(SqlalchemyBaseDAO):
         if exist:
             # 有记录就恢复软删，更新信息
             exist.relation = relation # 更新关系字段
+            exist.is_default = is_default  # 更新默认监护人标记
             exist.deleted_at = None  # 恢复软删
             await self.session.flush()  # 刷新到数据库以获取ID等信息
             await self.session.refresh(exist) # 刷新对象状态
@@ -56,7 +57,7 @@ class ParentStudentDao(SqlalchemyBaseDAO):
             parent_id=parent_id,
             student_id=student_id,
             relation=relation,
-           
+            is_default=is_default,
         )
 
     async def unbind(self, parent_id: int, student_id: int) -> bool:

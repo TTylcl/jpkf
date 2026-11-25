@@ -4,6 +4,9 @@
 统一管理所有固定参数 阈值 开关 端口
 常量 引用本模块
 """
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 # 1系统核心配置
 SYSTEM_NAME =  "基于pipeline的情感学习系统"
@@ -82,15 +85,16 @@ DB_CONFIG = {
     "cursor_factory": "RealDictCursor"
 }
 # 测试数据库配置 目前正在使用这个
-DB_URI_TEST = "postgresql+asyncpg://postgres:123456@localhost:5434/test_database"
-DB_CONFIG_TEST = {
-    "host": "localhost",
-    "port": 5434,
-    "database": "test_database",
-    "user": "postgres",
-    "password": "123456",
-    "cursor_factory": "RealDictCursor"
-}
+# 端口已从 5434（原 Docker 映射）改为 5432（原生 PostgreSQL 默认端口）
+DB_URI_TEST = os.getenv("DATABASE_URL")
+#DB_CONFIG_TEST = {
+#    "host": "localhost",
+#    "port": 5432,
+#    "database": "test_database",
+#    "user": "postgres",
+#    "password": "123456",
+#    "cursor_factory": "RealDictCursor"
+#}
 # 【9】认证配置（JWT）
 # ==============================================
 JWT_SECRET = "change-me-to-a-long-random-string"  # ⚠️  生产环境务必换成强随机串

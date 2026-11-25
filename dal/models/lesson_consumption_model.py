@@ -17,8 +17,7 @@ dal/models/lesson_consumption_model.py
 """
 from typing import Optional, TYPE_CHECKING
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import BigInteger, ForeignKey, Index, String, Integer, func
-from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy import BigInteger, ForeignKey, Index, String, Integer, DateTime
 from datetime import datetime
 from dal.models.base_model import Base
 from dal.models.enums import ConsumptionStatus
@@ -50,7 +49,7 @@ class LessonConsumption(Base):
         BigInteger, ForeignKey("user_info.user_id"), nullable=False, comment="被扣课时的学生ID"
     )
     consumed_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, nullable=False, comment="消课确认时间（教师操作的时间）"
+        DateTime(timezone=True), nullable=False, comment="消课确认时间（教师操作的时间）"
     )
     lesson_index: Mapped[Optional[int]] = mapped_column(
         Integer, comment="第几课时（相对于该学生的选课记录，如第3/20课时）"
@@ -58,17 +57,6 @@ class LessonConsumption(Base):
     status: Mapped[str] = mapped_column(
         String(20), default=ConsumptionStatus.CONFIRMED.value,
         comment="消课状态：confirmed=已确认 / cancelled=已取消"
-    )
-
-    # Base 继承的时间字段覆盖（使用 TIMESTAMP 而非 DateTime(timezone=True)）
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), comment="创建时间"
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), onupdate=func.now(), comment="更新时间"
-    )
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
-        TIMESTAMP, index=True, nullable=True, comment="删除时间"
     )
 
     # ── 关联查询 ──

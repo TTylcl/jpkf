@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, String, DateTime, BigInteger, Index, SmallInteger
@@ -27,10 +27,12 @@ class PreSchedule(Base):
 
     # 业务字段
     student_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("user_info.user_id", ondelete="CASCADE"),
         comment="学生ID"
     )
     course_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("course_info.course_id", ondelete="CASCADE"),
         comment="课程ID"
     )
@@ -40,6 +42,7 @@ class PreSchedule(Base):
     start_time: Mapped[object | None] = mapped_column(TIME, comment="期望开始时间")
     end_time: Mapped[object | None] = mapped_column(TIME, comment="期望结束时间")
     preferred_teacher_id: Mapped[int | None] = mapped_column(
+        BigInteger,
         ForeignKey("user_info.user_id", ondelete="SET NULL"),
         comment="期望教师ID"
     )
@@ -54,12 +57,12 @@ class PreSchedule(Base):
         comment="审核状态"
     )
     submit_time: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=datetime.now,
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
         comment="提交时间"
     )
     reviewer_id: Mapped[int | None] = mapped_column(BigInteger, comment="审核人ID")
-    review_time: Mapped[datetime | None] = mapped_column(DateTime, comment="审核时间")
+    review_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="审核时间")
     review_note: Mapped[str | None] = mapped_column(String(500), comment="审核备注")
 
     # 关联关系（单向，不需要 back_populates）

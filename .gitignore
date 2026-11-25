@@ -32,3 +32,8 @@ Thumbs.db
 *.safetensors
 /models/
 /model/
+
+# 7. 构建产物 / 打包元数据（勿提交）
+build/
+dist/
+*.egg-info/

@@ -3,7 +3,7 @@ dal/dao/teacher_todo_dao.py
 教师待办 DAO —— 上课时间到达时自动生成，教师确认消课后自动完成
 """
 from __future__ import annotations
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from core.dao.sqlalchemy_base_dao import SqlalchemyBaseDAO
 from dal.models.teacher_todo_model import TeacherTodo
 from dal.models.enums import TodoStatus
@@ -67,7 +67,7 @@ class TeacherTodoDao(SqlalchemyBaseDAO):
         return await self.update(
             todo_id,
             status=TodoStatus.DONE.value,
-            completed_at=datetime.now(),
+            completed_at=datetime.now(timezone.utc),
         )
 
     async def cancel_todo(self, todo_id: int) -> TeacherTodo | None:

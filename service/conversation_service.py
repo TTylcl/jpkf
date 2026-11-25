@@ -4,7 +4,7 @@ service/conversation_service.py —— 会话生命周期管理，内部基础�
 """
 from __future__ import annotations
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,7 +43,7 @@ class ConversationService:
             user_id=user_id,
             thread_id=new_thread_id,
             status="active",
-            start_time=datetime.now(),
+            start_time=datetime.now(timezone.utc),
         )
     async def close_session(self, session_id: int):
         """关闭会话"""

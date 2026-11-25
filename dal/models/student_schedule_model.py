@@ -11,9 +11,7 @@ dal/models/student_schedule_model.py
 """
 from typing import Optional, TYPE_CHECKING
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import BigInteger, ForeignKey, Index, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import TIMESTAMP
-from datetime import datetime
+from sqlalchemy import BigInteger, ForeignKey, Index, UniqueConstraint
 from dal.models.base_model import Base
 
 if TYPE_CHECKING:
@@ -37,16 +35,6 @@ class StudentSchedule(Base):
     )
     schedule_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("schedule.id", ondelete="CASCADE"), comment="排课ID"
-    )
-
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), comment="创建时间"
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), onupdate=func.now(), comment="更新时间"
-    )
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
-        TIMESTAMP, index=True, nullable=True, comment="删除时间"
     )
 
     # 关联

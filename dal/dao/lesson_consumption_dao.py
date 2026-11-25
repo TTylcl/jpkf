@@ -3,7 +3,7 @@ dal/dao/lesson_consumption_dao.py
 课时消耗 DAO —— 消课记录的增删查
 """
 from __future__ import annotations
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from core.dao.sqlalchemy_base_dao import SqlalchemyBaseDAO
 from dal.models.lesson_consumption_model import LessonConsumption
 from dal.models.enums import ConsumptionStatus
@@ -33,7 +33,7 @@ class LessonConsumptionDao(SqlalchemyBaseDAO):
             course_id=course_id,
             teacher_id=teacher_id,
             student_id=student_id,
-            consumed_at=consumed_at or datetime.now(),
+            consumed_at=consumed_at or datetime.now(timezone.utc),
             lesson_index=lesson_index,
             status=ConsumptionStatus.CONFIRMED.value,
         )
@@ -80,6 +80,6 @@ class LessonConsumptionDao(SqlalchemyBaseDAO):
         today = date.today()
         return sum(
             1 for r in records
-            if r.consumed_at and r.consumed_at.date() == today
+            if r.consumed_at and r.consumed_at.astimezone().date() == today
             and r.status == ConsumptionStatus.CONFIRMED.value
         )

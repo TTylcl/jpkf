@@ -3,8 +3,7 @@ from __future__ import annotations
 from typing import Optional
 from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import BigInteger, ForeignKey, String, Boolean, func, text, Index
-from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy import BigInteger, ForeignKey, String, Boolean, text, Index
 from dal.models.base_model import Base
 from dal.models.enums import ParentRelation
 
@@ -22,7 +21,6 @@ class ParentStudent(Base):
         ),
         Index("idx_parent_id", "parent_id"),
         Index("idx_student_id", "student_id"),
-        Index("idx_deleted_at", "deleted_at"),
         {"comment": "家长学生关联表"}
     )
 
@@ -38,19 +36,11 @@ class ParentStudent(Base):
     relation: Mapped[str] = mapped_column(
         String(32), default=ParentRelation.GUARDIAN.value, nullable=False, comment="亲属关系"
     )
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False, comment="是否默认监护人（同一学生多个家长时的主联系人）"
+    )
     
   
-    # 通用软删时间字段
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), comment="创建时间"
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=func.now(), onupdate=func.now(), comment="更新时间"
-    )
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
-        TIMESTAMP, index=True, nullable=True, comment="删除时间"
-    )
-
     @property
     def is_default_guardian(self) -> bool:
         return self.is_default is True
